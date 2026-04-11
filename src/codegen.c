@@ -241,6 +241,16 @@ static const char* emit_expr(ASTNode* node) {
                 return "riz_none()";
             }
             
+            if (node->as.call.callee->type == NODE_IDENTIFIER &&
+                strcmp(node->as.call.callee->as.identifier.name, "input") == 0) {
+                int t = new_tmp();
+                ind(); fprintf(G.out, "RizValue _t%d = aot_input(%d", t, argc);
+                for (int i = 0; i < argc; i++) fprintf(G.out, ", %s", arg_names[i]);
+                fprintf(G.out, ");\n");
+                snprintf(buf, sizeof(buf), "_t%d", t);
+                return buf;
+            }
+            
             /* Assuming callee is a literal string identifier matching a plugin function */
             const char* callee_name = node->as.call.callee->as.identifier.name;
             int t = new_tmp();

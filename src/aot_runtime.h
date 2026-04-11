@@ -127,4 +127,23 @@ static inline void aot_print(int n, ...) {
     va_end(ap);
 }
 
+static inline RizValue aot_input(int n, ...) {
+    va_list ap;
+    va_start(ap, n);
+    for (int i = 0; i < n; i++) {
+        RizValue v = va_arg(ap, RizValue);
+        if (i > 0) printf(" ");
+        riz_value_print(v);
+    }
+    va_end(ap);
+    
+    char buf[1024];
+    if (!fgets(buf, sizeof(buf), stdin)) {
+        return riz_string("");
+    }
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len-1] == '\n') buf[len-1] = '\0';
+    return riz_string(buf);
+}
+
 #endif

@@ -1,21 +1,3 @@
-# ─── Hello, Riz! ─────────────────────────────
-# The simplest Riz program
-
-let greeting = "Hello, Riz! 🚀"
-print(greeting)
-
-# Variables
-let name = "World"
-let message = "Hello, " + name + "!"
-print(message)
-
-# Math
-let x = 42
-let y = 3.14
-print("x =", x)
-print("y =", y)
-print("x + y =", x + y)
-
-# Boolean logic
-let is_cool = true
-print("Is Riz cool?", is_cool)
+print("Hello from Riz Native!")
+print("This console window will not close until you hit Enter.")
+input()

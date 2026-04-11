@@ -1,10 +1,23 @@
-# Riz Programming Language (Riz-Lang)
+# Riz: The Lightweight Native AI Engine (v0.8.1)
 
-Riz is a high-performance, statically typed yet dynamically executed programming language designed specifically for AI and Machine Learning development. Providing a clean, Pythonic syntax directly on top of extreme C/C++ execution layers, it acts as a lightweight, zero-overhead alternative to heavy compilation toolchains like Mojo.
+Riz is a high-performance, minimalist programming language designed for AI development, featuring a tree-walking interpreter, a VM, and an ultra-fast AOT (Ahead-of-Time) compiler. It is built to bridge the gap between Python's flexible ecosystem and C's native execution speed.
 
-> **Our Philosophy**: Maximum Scripting Agility meeting Uncompromised C11 / GPU Execution Speed.
+### Real-world Performance (Benchmark)
+*   🐍 **Pure Python (3.12)**: 11.34s
+*   ⚡ **Riz AOT (Typed)**: **0.038s** (295x faster)
 
-## 🚀 Key Features
+## 🌟 Key Features
+- **Zero-Dependency AOT**: Bundles TCC (Tiny C Compiler) to generate `.exe` without pre-installed tools.
+- **Static Typing**: Optional `: int` or `: float` annotations for maximum performance.
+- **Python Bridge**: Call any Python/Torch function directly with `py_call`.
+- **C-Struct Direct Access**: Map Memory Layout directly to AOT-compiled code.
+- **Embedded REPL**: Interactive environment for quick prototyping.
+
+## ⌨️ Built-in Functions
+- `print(...)`: Print values to console.
+- `input(prompt?)`: Wait for user input (useful to prevent AOT windows from closing).
+- `range(n)`, `len(obj)`, `type(obj)`, etc.
+- `py_import("module")`, `py_call(fn, ...)` (requires Python plugin).
 
 ### 1. Dual Engine: Interpreter & AOT Transpiler
 - **AST Interpreter**: Direct evaluation for rapid prototyping and CLI testing.
