@@ -223,6 +223,10 @@ static const char* emit_expr(ASTNode* node) {
 static void emit_stmt(ASTNode* node) {
     if (!node) return;
 
+    if (node->type != NODE_PROGRAM && node->type != NODE_BLOCK && node->type != NODE_FN_DECL) {
+        ind(); fprintf(G.out, "aot_current_line = %d;\n", node->line);
+    }
+
     switch (node->type) {
         case NODE_PROGRAM:
             for (int i = 0; i < node->as.program.count; i++) {
@@ -417,6 +421,21 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
 
     G.indent = 1;
     fprintf(G.out, "int main(void) {\n");
+    ind(); 
+    fprintf(G.out, "char src_path[512];\n");
+    ind();
+    fprintf(G.out, "strncpy(src_path, \"");
+    for (const char* c = output_path; *c; c++) {
+        if (*c == '\\') fprintf(G.out, "\\\\");
+        else fprintf(G.out, "%c", *c);
+    }
+    fprintf(G.out, "\", 511);\n");
+    ind();
+    fprintf(G.out, "char* suffix = strstr(src_path, \"_aot.c\");\n");
+    ind();
+    fprintf(G.out, "if (suffix) strcpy(suffix, \".riz\");\n");
+    ind();
+    fprintf(G.out, "aot_source_path = src_path;\n");
     emit_fn_registrations(program);
 
     /* ── Emit body ── */

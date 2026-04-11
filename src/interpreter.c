@@ -565,6 +565,21 @@ static void* ffi_get_native_ptr(RizPluginValue v) {
 }
 static void ffi_list_append(void* lp, RizPluginValue v) { riz_list_append((RizList*)lp, v); }
 
+static int ffi_get_current_line(void* interp) {
+    Interpreter* I = (Interpreter*)interp;
+    return I->current_line;
+}
+
+static void ffi_panic(void* interp, const char* msg) {
+    Interpreter* I = (Interpreter*)interp;
+    fprintf(stderr, "\n\033[1;31m[Riz AI Panic]\033[0m %s\n", msg);
+    fprintf(stderr, "  --> interpreter mode, line: %d\n", I->current_line);
+    I->had_error = true;
+    /* Optional: We could cleanly longjmp out, but for plugin panics mimicking AOT 
+       we can just exit for now or let the runtime error system handle it. */
+    exit(1);
+}
+
 static bool load_native_plugin(Interpreter* I, const char* path) {
 #ifdef _WIN32
     HMODULE lib = LoadLibraryA(path);
@@ -606,6 +621,8 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     api.get_native_ptr  = ffi_get_native_ptr;
     api.list_append     = ffi_list_append;
     api.interp          = I;
+    api.get_current_line = ffi_get_current_line;
+    api.panic           = ffi_panic;
     init_fn(&api);
 
     /* Track the handle so we can free it later */
@@ -1014,6 +1031,7 @@ static RizValue eval_match(Interpreter* I, ASTNode* node) {
 
 static RizValue eval(Interpreter* I, ASTNode* node) {
     if (!node) return riz_none();
+    I->current_line = node->line;
     switch (node->type) {
         /* Literals */
         case NODE_INT_LIT:    return riz_int(node->as.int_lit.value);

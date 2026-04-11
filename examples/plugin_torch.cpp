@@ -11,10 +11,23 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <string>
 
 extern "C" {
 
 static RizPluginAPI G;
+
+#define RIZ_TRY try {
+#define RIZ_CATCH(fn_name) } catch (const std::exception& e) { \
+    if (G.panic) { \
+        std::string full_msg = e.what(); \
+        size_t newline = full_msg.find('\n'); \
+        std::string short_msg = (newline != std::string::npos) ? full_msg.substr(0, newline) : full_msg; \
+        std::string msg = std::string("PyTorch Error in '") + fn_name + "':\n    " + short_msg; \
+        G.panic(G.interp, msg.c_str()); \
+    } \
+    return G.make_none(); \
+}
 
 // Wrapper for torch::Tensor
 struct TorchTensor {
@@ -74,6 +87,7 @@ static RizPluginValue fn_param(RizPluginValue* a, int n) {
 // -------------------------------------------------------------
 
 static RizPluginValue fn_set(RizPluginValue* a, int n) {
+    RIZ_TRY
     TorchTensor* tt = as_tt(a[0]);
     if (!tt) return G.make_none();
     int r = (int)a[1].as.integer, c = (int)a[2].as.integer;
@@ -83,6 +97,7 @@ static RizPluginValue fn_set(RizPluginValue* a, int n) {
     torch::NoGradGuard no_grad;
     tt->t[r][c] = v;
     return G.make_none();
+    RIZ_CATCH("tensor_set")
 }
 
 static RizPluginValue fn_get(RizPluginValue* a, int n) {
@@ -98,19 +113,19 @@ static RizPluginValue fn_get(RizPluginValue* a, int n) {
 // -------------------------------------------------------------
 
 static RizPluginValue fn_add(RizPluginValue* a, int n) {
-    return wrap(as_tt(a[0])->t + as_tt(a[1])->t);
+    RIZ_TRY return wrap(as_tt(a[0])->t + as_tt(a[1])->t); RIZ_CATCH("tensor_add")
 }
 
 static RizPluginValue fn_sub(RizPluginValue* a, int n) {
-    return wrap(as_tt(a[0])->t - as_tt(a[1])->t);
+    RIZ_TRY return wrap(as_tt(a[0])->t - as_tt(a[1])->t); RIZ_CATCH("tensor_sub")
 }
 
 static RizPluginValue fn_mul(RizPluginValue* a, int n) {
-    return wrap(as_tt(a[0])->t * as_tt(a[1])->t);
+    RIZ_TRY return wrap(as_tt(a[0])->t * as_tt(a[1])->t); RIZ_CATCH("tensor_mul")
 }
 
 static RizPluginValue fn_matmul(RizPluginValue* a, int n) {
-    return wrap(torch::matmul(as_tt(a[0])->t, as_tt(a[1])->t));
+    RIZ_TRY return wrap(torch::matmul(as_tt(a[0])->t, as_tt(a[1])->t)); RIZ_CATCH("tensor_matmul")
 }
 
 // -------------------------------------------------------------

@@ -25,6 +25,7 @@ typedef struct {
     SignalType   signal;        /* control flow signal */
     RizValue     signal_value;  /* return value when SIG_RETURN */
     bool         had_error;
+    int          current_line;  /* currently executing line for diagnostic panics */
     /* Import tracking (Phase 2) */
     char**       imported_files;
     int          import_count;

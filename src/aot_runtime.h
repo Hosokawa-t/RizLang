@@ -13,6 +13,11 @@
 #include "riz_plugin.h"
 #include <math.h>
 
+/* AOT Line Tracking & Diagnostics */
+extern int aot_current_line;
+extern const char* aot_source_path;
+void aot_panic(void* interp, const char* msg);
+
 /* AOT FFI Loader API */
 void aot_load_plugin(const char* lib_path);
 void aot_register_user_fn(const char* name, NativeFnPtr fn, int arity);

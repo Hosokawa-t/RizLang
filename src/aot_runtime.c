@@ -14,6 +14,48 @@
 #include <dlfcn.h>
 #endif
 
+/* ─── AOT Line Tracking & Diagnostics ──────────────── */
+
+int aot_current_line = 0;
+const char* aot_source_path = "";
+
+static int aot_get_line(void* interp) {
+    (void)interp;  /* unused in AOT */
+    return aot_current_line;
+}
+
+void aot_panic(void* interp, const char* msg) {
+    (void)interp;
+    fprintf(stderr, "\n\033[1;31m[Riz AI Panic]\033[0m %s\n", msg);
+    fprintf(stderr, "  --> %s:%d\n\n", aot_source_path ? aot_source_path : "?", aot_current_line);
+
+    if (aot_source_path && strlen(aot_source_path) > 0) {
+        FILE* f = fopen(aot_source_path, "r");
+        if (f) {
+            char line_buf[512];
+            int current = 1;
+            int start_print = aot_current_line > 2 ? aot_current_line - 2 : 1;
+            int end_print = aot_current_line + 2;
+            
+            while (fgets(line_buf, sizeof(line_buf), f)) {
+                if (current >= start_print && current <= end_print) {
+                    if (current == aot_current_line) {
+                        fprintf(stderr, "\033[1;31m%4d | %s\033[0m", current, line_buf);
+                        fprintf(stderr, "     | \033[1;31m^^^^^^\033[0m\n");
+                    } else {
+                        fprintf(stderr, "\033[90m%4d | \033[0m%s", current, line_buf);
+                    }
+                }
+                current++;
+                if (current > end_print) break;
+            }
+            fclose(f);
+        }
+    }
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
 /* ─── AOT Function Table ───────────────────────────── */
 
 #define MAX_AOT_FNS 256
@@ -84,6 +126,8 @@ void aot_load_plugin(const char* lib_path) {
     api.get_native_ptr = _get_ptr;
     api.list_append = _list_add;
     api.interp = NULL; /* Opaque dummy interp, not actually used by our robust AOT API */
+    api.get_current_line = aot_get_line;
+    api.panic = aot_panic;
 
     init_fn(&api);
 }

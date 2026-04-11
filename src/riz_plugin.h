@@ -68,6 +68,10 @@ typedef struct {
 
     /* The interpreter pointer (opaque to plugins): */
     void* interp;
+
+    /* ─── Diagnostics & Error Handling ────────────────────── */
+    int (*get_current_line)(void* interp);
+    void (*panic)(void* interp, const char* msg);
 } RizPluginAPI;
 
 /* ─── Plugin Init Function Signature ──────────────────── */

@@ -1,4 +1,4 @@
-import_native "plugin_tensor.dll"
+import_native "plugin_torch.dll"
 
 print("============================================================")
 print("  Riz AOT Native Function Tests")
