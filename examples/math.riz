@@ -1,0 +1,26 @@
+# math.riz — Math library module
+
+fn clamp(val, lo, hi) {
+    if val < lo { return lo }
+    if val > hi { return hi }
+    return val
+}
+
+fn lerp(a, b, t) => a + (b - a) * t
+
+fn factorial(n) {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+fn gcd(a, b) {
+    while b != 0 {
+        let temp = b
+        b = a % b
+        a = temp
+    }
+    return a
+}
+
+let PI = 3.14159265358979
+let E  = 2.71828182845905

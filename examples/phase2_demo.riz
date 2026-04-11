@@ -1,0 +1,143 @@
+# ─── Riz Phase 2 Feature Demo ────────────────
+# Dictionaries, Methods, Match, Import, and more!
+
+print("═══════════════════════════════════════")
+print("     Riz Phase 2 — Feature Demo")
+print("═══════════════════════════════════════")
+
+# ─── Dictionaries ───
+print("\n▸ Dictionaries")
+let person = {name: "Riz", version: 2, lang: "AI-Native"}
+print("  person:", person)
+print("  person[\"name\"]:", person["name"])
+print("  person.lang:", person.lang)
+print("  keys:", person.keys())
+print("  values:", person.values())
+print("  has 'name'?:", person.has("name"))
+
+# Dict methods
+let config = {debug: false, threads: 8}
+config.set("verbose", true)
+print("  config after set:", config)
+config.delete("debug")
+print("  config after delete:", config)
+
+# Dict merge with +
+let merged = {a: 1, b: 2} + {c: 3, d: 4}
+print("  merged:", merged)
+
+# Dict items
+let items = person.items()
+print("  items:", items)
+
+# ─── String Methods ───
+print("\n▸ String Methods")
+let text = "  Hello, Riz!  "
+print("  upper:", "hello".upper())
+print("  lower:", "HELLO".lower())
+print("  trim:", text.trim())
+print("  split:", "a,b,c,d".split(","))
+print("  contains:", "Hello Riz".contains("Riz"))
+print("  starts_with:", "Hello".starts_with("He"))
+print("  ends_with:", "Hello".ends_with("lo"))
+print("  replace:", "foo bar foo".replace("foo", "baz"))
+print("  chars:", "Riz".chars())
+print("  find:", "Hello World".find("World"))
+print("  repeat:", "ha".repeat(3))
+
+# ─── List Methods ───
+print("\n▸ List Methods")
+mut nums = [5, 3, 1, 4, 2]
+print("  original:", nums)
+nums.sort()
+print("  sorted:", nums)
+nums.reverse()
+print("  reversed:", nums)
+nums.push(6)
+print("  after push(6):", nums)
+let popped = nums.pop()
+print("  popped:", popped)
+print("  join:", [1, 2, 3].join(" + "))
+print("  contains 3?:", [1, 2, 3].contains(3))
+print("  index of 3:", [10, 20, 30].index(30))
+print("  count:", [1, 2, 1, 3, 1].count(1))
+print("  slice:", [10, 20, 30, 40, 50].slice(1, 4))
+
+# Method chaining on lists
+fn is_even(x) => x % 2 == 0
+fn double(x) => x * 2
+
+let result = [1, 2, 3, 4, 5, 6, 7, 8]
+    .filter(is_even)
+    .map(double)
+print("  filter+map:", result)
+
+# ─── List Concatenation ───
+print("\n▸ List Operations")
+let combined = [1, 2, 3] + [4, 5, 6]
+print("  [1,2,3] + [4,5,6]:", combined)
+
+# ─── Pattern Matching ───
+print("\n▸ Pattern Matching")
+
+fn describe(x) {
+    return match x {
+        0 => "zero",
+        1 => "one",
+        n if n > 100 => format("big: {}", n),
+        n if n < 0 => format("negative: {}", n),
+        _ => format("other: {}", x),
+    }
+}
+
+print("  match 0:", describe(0))
+print("  match 1:", describe(1))
+print("  match 42:", describe(42))
+print("  match 999:", describe(999))
+print("  match -5:", describe(-5))
+
+# Match with side effects
+fn classify(score) {
+    match score {
+        100 => print("    Perfect!"),
+        n if n >= 90 => print("    A grade"),
+        n if n >= 80 => print("    B grade"),
+        n if n >= 70 => print("    C grade"),
+        _ => print("    Keep trying!"),
+    }
+}
+
+print("  Classifying scores:")
+classify(100)
+classify(85)
+classify(42)
+
+# ─── Format function ───
+print("\n▸ String Formatting")
+let name = "Riz"
+let ver = 2
+print("  " + format("Hello, {}! Version {}", name, ver))
+print("  " + format("Result: {} + {} = {}", 10, 20, 10 + 20))
+
+# ─── New Builtins ───
+print("\n▸ New Built-in Functions")
+print("  sorted:", sorted([5, 2, 8, 1, 9]))
+print("  reversed:", reversed([1, 2, 3]))
+print("  enumerate:", enumerate(["a", "b", "c"]))
+print("  zip:", zip([1, 2, 3], ["x", "y", "z"]))
+
+# Assert
+assert(1 + 1 == 2)
+assert(len("Riz") == 3, "Riz should have 3 chars")
+print("  assertions passed ✓")
+
+# ─── Dict with for loop ───
+print("\n▸ Iterating Dicts")
+let scores = {Alice: 95, Bob: 87, Charlie: 92}
+for key in scores.keys() {
+    print("  " + key + ": " + str(scores[key]))
+}
+
+print("\n═══════════════════════════════════════")
+print("   Phase 2 — All features working! ✓")
+print("═══════════════════════════════════════")
