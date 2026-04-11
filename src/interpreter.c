@@ -556,6 +556,13 @@ static RizPluginValue ffi_make_bool(bool v)        { return riz_bool(v); }
 static RizPluginValue ffi_make_string(const char*v){ return riz_string(v); }
 static RizPluginValue ffi_make_none(void)          { return riz_none(); }
 static RizPluginValue ffi_make_list(void)          { return riz_list_new(); }
+static RizPluginValue ffi_make_native_ptr(void* p, const char* tag, void(*dtor)(void*)) {
+    return riz_native_ptr(p, tag, dtor);
+}
+static void* ffi_get_native_ptr(RizPluginValue v) {
+    if (v.type == VAL_NATIVE_PTR && v.as.native_ptr) return v.as.native_ptr->ptr;
+    return NULL;
+}
 static void ffi_list_append(void* lp, RizPluginValue v) { riz_list_append((RizList*)lp, v); }
 
 static bool load_native_plugin(Interpreter* I, const char* path) {
@@ -589,14 +596,16 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     /* Build the API bridge and call the plugin's init */
     RizPluginAPI api;
     api.register_fn  = ffi_register_fn;
-    api.make_int     = ffi_make_int;
-    api.make_float   = ffi_make_float;
-    api.make_bool    = ffi_make_bool;
-    api.make_string  = ffi_make_string;
-    api.make_none    = ffi_make_none;
-    api.make_list    = ffi_make_list;
-    api.list_append  = ffi_list_append;
-    api.interp       = I;
+    api.make_int        = ffi_make_int;
+    api.make_float      = ffi_make_float;
+    api.make_bool       = ffi_make_bool;
+    api.make_string     = ffi_make_string;
+    api.make_none       = ffi_make_none;
+    api.make_list       = ffi_make_list;
+    api.make_native_ptr = ffi_make_native_ptr;
+    api.get_native_ptr  = ffi_get_native_ptr;
+    api.list_append     = ffi_list_append;
+    api.interp          = I;
     init_fn(&api);
 
     /* Track the handle so we can free it later */

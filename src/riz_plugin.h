@@ -54,6 +54,15 @@ typedef struct {
     RizPluginValue (*make_none)(void);
     RizPluginValue (*make_list)(void);
 
+    /* Native pointer: wraps a C pointer so Riz can hold it as a variable.
+     * type_tag: human-readable label (e.g. "Tensor", "Model")
+     * dtor:     called when Riz frees this value (NULL = no cleanup) */
+    RizPluginValue (*make_native_ptr)(void* ptr, const char* type_tag,
+                                      void (*dtor)(void*));
+
+    /* Extract the raw C pointer from a VAL_NATIVE_PTR value: */
+    void* (*get_native_ptr)(RizPluginValue v);
+
     /* List manipulation: */
     void (*list_append)(void* list_ptr, RizPluginValue v);
 

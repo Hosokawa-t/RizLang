@@ -1,0 +1,62 @@
+# Riz Tensor Plugin Test (Phase 6.1)
+# Tests the Universal Tensor API via the dummy CPU backend.
+#
+# Build plugin:  gcc -shared -O2 -Isrc -o plugin_tensor.dll examples/plugin_tensor.c
+# Run:           riz examples/tensor_test.riz
+
+import_native "plugin_tensor.dll"
+
+print("========================================")
+print("  Riz Tensor System -- Phase 6.1 Test")
+print("========================================")
+
+# Create tensors
+print("")
+print("-- Create 3x3 tensors --")
+let a = tensor_ones(3, 3)
+let b = tensor_rand(3, 3)
+
+print("A (ones):")
+tensor_print(a)
+print("B (random):")
+tensor_print(b)
+
+# Addition
+print("-- tensor_add(A, B) --")
+let c = tensor_add(a, b)
+tensor_print(c)
+
+# Element-wise multiplication
+print("-- tensor_mul(A, B) --")
+let d = tensor_mul(a, b)
+tensor_print(d)
+
+# Matrix multiplication
+print("-- tensor_matmul(A, B) --")
+let e = tensor_matmul(a, b)
+tensor_print(e)
+
+# Sum
+print("-- tensor_sum(B) --")
+let s = tensor_sum(b)
+print("Sum of B =", s)
+
+# Shape
+print("-- tensor_shape(e) --")
+let sh = tensor_shape(e)
+print("Shape:", sh)
+
+# Larger matrix multiplication (performance)
+print("")
+print("-- Matmul 128x128 * 128x128 --")
+let big_a = tensor_rand(128, 128)
+let big_b = tensor_rand(128, 128)
+let big_c = tensor_matmul(big_a, big_b)
+let big_s = tensor_sum(big_c)
+print("Sum of 128x128 result:", big_s)
+print("Shape:", tensor_shape(big_c))
+
+print("")
+print("========================================")
+print("  Tensor Pipeline: OK")
+print("========================================")

@@ -45,6 +45,15 @@ RizValue riz_instance_new(RizStructDef* def, RizValue* field_values) {
     RizValue r; r.type = VAL_INSTANCE; r.as.instance = inst; return r;
 }
 
+RizValue riz_native_ptr(void* ptr, const char* type_tag, RizPtrDestructor dtor) {
+    RizNativePtr* np = RIZ_ALLOC(RizNativePtr);
+    np->ptr = ptr;
+    np->type_tag = riz_strdup(type_tag ? type_tag : "native");
+    np->destructor = dtor;
+    np->ref_count = 1;
+    RizValue r; r.type = VAL_NATIVE_PTR; r.as.native_ptr = np; return r;
+}
+
 /* ═══ Struct methods ═══ */
 
 void riz_struct_add_method(RizStructDef* def, const char* name, RizValue fn_val) {
@@ -85,6 +94,9 @@ void riz_value_print(RizValue v) {
             for(int i=0;i<inst->def->field_count;i++){if(i>0)printf(", ");printf("%s=",inst->def->field_names[i]);riz_value_print(inst->fields[i]);}
             printf(")"); break;
         }
+        case VAL_NATIVE_PTR:
+            printf("<%s@%p>", v.as.native_ptr->type_tag, v.as.native_ptr->ptr);
+            break;
     }
 }
 
@@ -131,6 +143,11 @@ char* riz_value_to_string(RizValue v) {
             while(len+2>=cap){cap*=2;res=(char*)realloc(res,cap);}
             res[len++]=v.type==VAL_LIST?']':'}';res[len]='\0';return res;
         }
+        case VAL_NATIVE_PTR: {
+            char nb[128];
+            snprintf(nb, sizeof(nb), "<%s@%p>", v.as.native_ptr->type_tag, v.as.native_ptr->ptr);
+            return riz_strdup(nb);
+        }
     }
     return riz_strdup("?");
 }
@@ -161,7 +178,8 @@ const char* riz_value_type_name(RizValue v) {
     case VAL_LIST:return"list";case VAL_DICT:return"dict";
     case VAL_STRUCT_DEF:return v.as.struct_def->name;
     case VAL_TRAIT_DEF:return v.as.trait_def->name;
-    case VAL_INSTANCE:return v.as.instance->def->name;}
+    case VAL_INSTANCE:return v.as.instance->def->name;
+    case VAL_NATIVE_PTR:return v.as.native_ptr->type_tag;}
     return"unknown";
 }
 
@@ -172,6 +190,7 @@ RizValue riz_value_copy(RizValue v) {
     if(v.type==VAL_LIST){v.as.list->ref_count++;return v;}
     if(v.type==VAL_DICT){v.as.dict->ref_count++;return v;}
     if(v.type==VAL_INSTANCE){v.as.instance->ref_count++;return v;}
+    if(v.type==VAL_NATIVE_PTR){v.as.native_ptr->ref_count++;return v;}
     return v;
 }
 
@@ -191,6 +210,16 @@ void riz_value_free(RizValue* v) {
                 free(v->as.trait_def);
             }
             v->as.trait_def = NULL;
+            break;
+        }
+        case VAL_NATIVE_PTR: {
+            if (v->as.native_ptr && --v->as.native_ptr->ref_count <= 0) {
+                if (v->as.native_ptr->destructor)
+                    v->as.native_ptr->destructor(v->as.native_ptr->ptr);
+                free(v->as.native_ptr->type_tag);
+                free(v->as.native_ptr);
+            }
+            v->as.native_ptr = NULL;
             break;
         }
         default:break;

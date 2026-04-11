@@ -26,7 +26,8 @@ typedef enum {
     VAL_DICT,
     VAL_STRUCT_DEF,
     VAL_INSTANCE,
-    VAL_TRAIT_DEF
+    VAL_TRAIT_DEF,
+    VAL_NATIVE_PTR     /* Opaque pointer to plugin-owned data (e.g. Tensor) */
 } ValueType;
 
 /* ─── Native Function Pointer ─────────────────────────── */
@@ -96,6 +97,16 @@ typedef struct {
     int    method_count;
 } RizTraitDef;
 
+/* ─── Native Pointer (opaque handle for plugins) ──────── */
+typedef void (*RizPtrDestructor)(void* ptr);
+
+typedef struct {
+    void*             ptr;          /* The raw C pointer (e.g. Tensor*) */
+    char*             type_tag;     /* Human-readable tag: "Tensor", "Model" */
+    RizPtrDestructor  destructor;   /* Called on free; NULL = no-op */
+    int               ref_count;
+} RizNativePtr;
+
 /* ─── The Main Value ──────────────────────────────────── */
 struct RizValue {
     ValueType type;
@@ -111,6 +122,7 @@ struct RizValue {
         RizStructDef* struct_def;
         RizInstance*  instance;
         RizTraitDef*  trait_def;
+        RizNativePtr* native_ptr;   /* Opaque handle to plugin data */
     } as;
 };
 
@@ -126,6 +138,7 @@ RizValue riz_native(const char* name, NativeFnPtr fn, int arity);
 RizValue riz_list_new(void);
 RizValue riz_struct_def_new(const char* name, char** fields, int field_count);
 RizValue riz_instance_new(RizStructDef* def, RizValue* field_values);
+RizValue riz_native_ptr(void* ptr, const char* type_tag, RizPtrDestructor dtor);
 
 /* ─── Operations ──────────────────────────────────────── */
 void     riz_value_print(RizValue v);
