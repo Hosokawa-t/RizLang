@@ -1,0 +1,30 @@
+# GGUF 推論デモ — llama.cpp の llama-cli を経由（plugin_llama_cli）
+#
+# 1) build_llama_cli_plugin.bat で plugin_llama_cli.dll をビルド
+# 2) llama-cli を PATH に通すか、下の llama_set_cli を有効化
+# 3) model_path をあなたの .gguf に変更
+#
+# 詳細: examples/LLAMA_INFER.md
+
+import_native "plugin_llama_cli.dll"
+
+# PATH に無い場合のみ有効化してフルパスを指定:
+# llama_set_cli("C:\\path\\to\\llama.cpp\\build\\bin\\llama-cli.exe")
+
+let model_path = "model.gguf"
+let prompt = "List three colors of the rainbow in English, comma-separated, no explanation."
+let max_tokens = 128
+
+print("============================================================")
+print("  Riz + llama.cpp (llama-cli bridge)")
+print("============================================================")
+print("")
+print("Model:", model_path)
+print("Max tokens:", max_tokens)
+print("")
+print("--- output (llama-cli stdout) ---")
+
+let out = llama_infer(model_path, prompt, max_tokens)
+print(out)
+print("")
+print("--- end ---")
