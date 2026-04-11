@@ -101,6 +101,18 @@ static inline double aot_num(RizValue a) {
     return 0;
 }
 
+static inline long long aot_to_int(RizValue a) {
+    if (a.type == VAL_INT) return a.as.integer;
+    if (a.type == VAL_FLOAT) return (long long)a.as.floating;
+    return 0;
+}
+
+static inline double aot_to_float(RizValue a) {
+    if (a.type == VAL_INT) return (double)a.as.integer;
+    if (a.type == VAL_FLOAT) return a.as.floating;
+    return 0.0;
+}
+
 static inline RizValue aot_index(RizValue obj, RizValue idx) {
     if (obj.type == VAL_LIST) {
         int i = 0;
@@ -144,6 +156,18 @@ static inline RizValue aot_input(int n, ...) {
     size_t len = strlen(buf);
     if (len > 0 && buf[len-1] == '\n') buf[len-1] = '\0';
     return riz_string(buf);
+}
+
+static inline RizValue aot_member_get(RizValue obj, const char* member) {
+    if (obj.type == VAL_LIST && strcmp(member, "count") == 0) return riz_int(obj.as.list->count);
+    /* For now, simplified dynamic member get. 
+       In a full implemention, we'd lookup method in struct def or list_methods. */
+    fprintf(stderr, "[AOT] Warning: Dynamic member get '%s' not fully integrated in runtime\n", member);
+    return riz_none();
+}
+
+static inline void aot_member_set(RizValue obj, const char* member, RizValue val) {
+    fprintf(stderr, "[AOT] Warning: Dynamic member set '%s' not fully integrated in runtime\n", member);
 }
 
 #endif
