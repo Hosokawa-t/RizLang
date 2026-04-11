@@ -87,7 +87,12 @@ static RizPluginValue _mk_none(void) { return riz_none(); }
 static RizPluginValue _mk_list(void) { return riz_list_new(); }
 static RizPluginValue _mk_ptr(void* ptr, const char* tag, void(*d)(void*)) { return riz_native_ptr(ptr, tag, d); }
 static void* _get_ptr(RizPluginValue v) { return v.type == VAL_NATIVE_PTR ? v.as.native_ptr->ptr : NULL; }
-static void _list_add(void* lst, RizPluginValue v) { riz_list_append((RizList*)lst, v); }
+static void _list_add(RizPluginValue lst, RizPluginValue v) { if(lst.type == VAL_LIST) riz_list_append(lst.as.list, v); }
+static int _list_len(RizPluginValue v) { return v.type == VAL_LIST ? v.as.list->count : 0; }
+static RizPluginValue _list_get(RizPluginValue v, int index) { 
+    if (v.type != VAL_LIST || index < 0 || index >= v.as.list->count) return _mk_none();
+    return v.as.list->items[index];
+}
 
 /* ─── FFI Bridge Loader ────────────────────────────── */
 
@@ -125,6 +130,8 @@ void aot_load_plugin(const char* lib_path) {
     api.make_native_ptr = _mk_ptr;
     api.get_native_ptr = _get_ptr;
     api.list_append = _list_add;
+    api.list_length = _list_len;
+    api.list_get = _list_get;
     api.interp = NULL; /* Opaque dummy interp, not actually used by our robust AOT API */
     api.get_current_line = aot_get_line;
     api.panic = aot_panic;

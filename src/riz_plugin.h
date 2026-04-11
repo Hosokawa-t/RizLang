@@ -64,7 +64,9 @@ typedef struct {
     void* (*get_native_ptr)(RizPluginValue v);
 
     /* List manipulation: */
-    void (*list_append)(void* list_ptr, RizPluginValue v);
+    void (*list_append)(RizPluginValue list, RizPluginValue v);
+    int (*list_length)(RizPluginValue list);
+    RizPluginValue (*list_get)(RizPluginValue list, int index);
 
     /* The interpreter pointer (opaque to plugins): */
     void* interp;

@@ -563,7 +563,12 @@ static void* ffi_get_native_ptr(RizPluginValue v) {
     if (v.type == VAL_NATIVE_PTR && v.as.native_ptr) return v.as.native_ptr->ptr;
     return NULL;
 }
-static void ffi_list_append(void* lp, RizPluginValue v) { riz_list_append((RizList*)lp, v); }
+static void ffi_list_append(RizPluginValue lst, RizPluginValue v) { if(lst.type == VAL_LIST) riz_list_append(lst.as.list, v); }
+static int ffi_list_len(RizPluginValue v) { return v.type == VAL_LIST ? v.as.list->count : 0; }
+static RizPluginValue ffi_list_get(RizPluginValue v, int index) {
+    if (v.type != VAL_LIST || index < 0 || index >= v.as.list->count) return riz_none();
+    return v.as.list->items[index];
+}
 
 static int ffi_get_current_line(void* interp) {
     Interpreter* I = (Interpreter*)interp;
@@ -620,6 +625,8 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     api.make_native_ptr = ffi_make_native_ptr;
     api.get_native_ptr  = ffi_get_native_ptr;
     api.list_append     = ffi_list_append;
+    api.list_length     = ffi_list_len;
+    api.list_get        = ffi_list_get;
     api.interp          = I;
     api.get_current_line = ffi_get_current_line;
     api.panic           = ffi_panic;
