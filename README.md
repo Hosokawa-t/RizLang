@@ -1,102 +1,88 @@
-# Riz Programming Language
+# Riz Programming Language (Riz-Lang)
 
-[Read in Japanese (日本語)](#riz-プログラミング言語-japanese)
+Riz is a high-performance, statically typed yet dynamically executed programming language designed specifically for AI and Machine Learning development. Providing a clean, Pythonic syntax directly on top of extreme C/C++ execution layers, it acts as a lightweight, zero-overhead alternative to heavy compilation toolchains like Mojo.
 
+> **Our Philosophy**: Maximum Scripting Agility meeting Uncompromised C11 / GPU Execution Speed.
 
-Riz is a high-performance, statically typed yet dynamically executed programming language designed for AI development, offering a clean syntax inspired by Modern languages. It prioritizes speed, minimal dependencies, and native interoperability.
+## 🚀 Key Features
 
-## Features
+### 1. Dual Engine: Interpreter & AOT Transpiler
+- **AST Interpreter**: Direct evaluation for rapid prototyping and CLI testing.
+- **Register VM**: High-performance bytecode virtual machine.
+- **Zero-Cost AOT Compiler**: Compiles Riz scripts strictly down to `C11`, utilizing `GCC` to compile standalone Native Executables. AOT emits exact memory assignments avoiding GC pausing, rivaling pure C++ speed.
 
-- **Blazing Fast Execution**: Operates across three execution modes:
-  - **AST Interpreter**: Direct evaluation for rapid prototyping.
-  - **Register VM**: High-performance bytecode virtual machine utilizing a register-based architecture and computed goto dispatch for optimal CPU branch prediction.
-  - **AOT Compiler**: Ahead-of-time compilation that transpiles Riz code directly to C and leverages GCC to produce standalone native binaries.
-- **Native FFI**: Seamless interaction with C/C++ libraries via `import_native`.
-- **Zero Overhead Portability**: Compiles down to lightweight native executables (as small as a few hundred kilobytes) without requiring a heavy runtime environment.
+### 2. CPython Interoperability (Mojo Rivaling)
+Riz embraces the entire Python data science ecosystem directly from `C`. Through the `plugin_python.dll` API Bridge, Riz loads a standalone CPython core, allowing you to fluidly write Riz scripts that invoke Python code, seamlessly converting variables, Tuples and Lists automatically.
 
-## Usage
+```python
+# python_demo.riz
+import_native "plugin_python.dll"
 
-### Building from Source
+# Execute standard Python imports
+py_exec("import numpy as np")
+py_exec("print('Hello from the CPython core!')")
 
-Ensure you have GCC installed (e.g., via MSYS2 MinGW-w64 on Windows):
+# Fetch an existing Python Module and call it directly from Riz
+let py_math = py_import("math")
+let pow_fn = py_getattr(py_math, "pow")
 
-```bash
-gcc -Wall -O2 -std=c11 -Isrc -o riz src/*.c -lm
+let res = py_call(pow_fn, 2, 10)  # Natively calculates `math.pow(2, 10)`
+print(res) # 1024
 ```
 
-### Running Code
+### 3. Native Operator Overloading via Neural Plugins
+Riz supports operator overloading out of the box dynamically via plugins. Want to multiply PyTorch Tensors? Riz intercepts `.riz` math operators `X * W1` and redirects them straight to the `LibTorch` C++ DLL bypassing interpreted overhead. 
 
-Executes the script via the standard AST interpreter:
-```bash
-riz example.riz
+```python
+# attention.riz
+import_native "plugin_torch.dll"
+
+fn attention(X, W) {
+    # Dynamically maps `*` to `torch::matmul(X, W)` in C++ Library
+    let z = X * W  
+    return tensor_relu(z)
+}
 ```
 
-Runs the script using the high-performance Register VM:
-```bash
-riz --vm example.riz
+### 4. Rust-Style Error Diagnostics
+AI errors like Tensor Shape Mismatches normally crash C++ completely yielding hundreds of obscure standard library errors. Riz embeds safe boundaries and dynamic line tracers to isolate identical code segments visually across AOT Compilation.
+
+```text
+[Riz AI Panic] PyTorch Error in 'tensor_matmul':
+    mat1 and mat2 shapes cannot be multiplied (2x4 and 8x4)
+  --> examples\attention_test.riz:10
+
+   8 | 
+   9 | fn attention(x, W) {
+  10 |     let z = x * W
+     | ^^^^^^
 ```
-
-Ahead-of-Time compilation: Transpiles the script to C and generates a standalone native executable:
-```bash
-riz --aot example.riz
-./example.exe
-```
-
-## Architecture
-
-Riz separates execution into a front-end (Lexer, Parser, AST) and multiple back-ends. The recent addition of a Register-based VM and an AOT transpilation pipeline allows Riz scripts to execute faster than conventional interpreted languages like Python while maintaining script-like development agility.
-
-## License
-
-Riz is open-sourced software licensed under the [MIT License](LICENSE).
 
 ---
 
-# Riz プログラミング言語 (Japanese)
+# Riz 日本語ドキュメント
 
-Rizは、モダンな構文を持ち、AI開発に向けた高いパフォーマンスとネイティブコードとの連携を重視したプログラミング言語です。速度、最小限の依存関係、ポータビリティに重点を置いて設計されています。
+Riz は、最新のAI開発に向けて設計されたC言語連携・超高速スクリプト言語です。「MojoのようにPython系資産を活用しながら、極小のC言語エンジンで動く」という真新しいアプローチを取っています。
 
-## 主な機能
+## 🔥 メイン機能
 
-- **超高速な実行速度**: 3つの実行モードを備えています:
-  - **ASTインタプリタ**: 速やかなプロトタイピングに適した直接評価。
-  - **レジスタVM**: レジスタベースのアーキテクチャと Computed Goto ディスパッチを採用し、CPUの分岐予測を最適化した高性能バイトコード仮想マシン。
-  - **AOTコンパイラ**: 事前コンパイル機能。Rizのコードを高速にC言語へ変換し、GCCを利用してオーバーヘッドのない数十〜数百KBのスタンドアロン・ネイティブバイナリ(.exe等)を生成します。
-- **ネイティブ FFI**: `import_native` 構文により、C/C++等の外部共有ライブラリ(DLL/SO)をシームレスに直接呼び出すことが可能です。
-- **軽量なフットプリント**: 言語のランタイム自体が極めて小さく、専用の重い実行環境を構築することなく配布・実行が可能です。
+- **AOTコンパイラ (超速C言語直訳)**
+  スクリプトを記述後、`--aot` フラグ一つでRizコードを 100% ピュアな C11言語に自動翻訳 (トランスパイル) し、GCCで直接 `exe` にコンパイルします。不要なGCなどが発生しないため、最速で実行可能です。
+- **Pythonの完全な相互運用 (`plugin_python`)**
+  コンパイルされた数百KBの実行ファイルでありながら、バックグラウンドにCPython環境をシームレスに結合し、Rizの中から `python` の関数、`numpy`・`matplotlib` 等を直接呼び出して変数をやり取りできます。
+- **直感的な深層学習とC++プラグイン (`plugin_torch`)**
+  プラグインを通じて演算子（`*` や `+`）を自由にオーバーロード可能。テンソル（PyTorchライブラリ）等のC++の数式演算を、Pythonのように直感的に記述できます。
+- **Rustスタイルのパニック表示**
+  C++側のバグや行列の次元数エラー（Shape Mismatch）が起きた場合、C++のスタックトレースでシステムごと落ちるのではなく、Rizのソースコードの何行目が原因か、ソースコードをターミナルに赤色で展開してRustのように美しく表示します。
 
-## 使用方法
+## 実行方法
 
-### ビルド
-
-GCCがインストールされた環境（Windowsの場合は MSYS2 MinGW-w64 など）でビルドします:
-
+AOT（自動コンパイルモード）で実行：
 ```bash
-gcc -Wall -O2 -std=c11 -Isrc -o riz src/*.c -lm
+riz --aot examples\python_demo.riz
+examples\python_demo.exe
 ```
 
-### スクリプトの実行
+## License
 
-通常のASTインタプリタで実行:
-```bash
-riz example.riz
-```
-
-最適化されたレジスタVMで実行:
-```bash
-riz --vm example.riz
-```
-
-事前コンパイル (AOT) でネイティブバイナリを生成して実行:
-```bash
-riz --aot example.riz
-./example.exe
-```
-
-## アーキテクチャ
-
-Rizはフロントエンド（字句解析、構文解析、抽象構文木）と複数のバックエンドに処理が分離されています。新たに実装されたレジスタVMとAOTコンパイラにより、スクリプト言語のような手軽さを保ちながら、従来のインタプリタ言語（Pythonなど）を大幅に凌駕する実行速度を実現しています。
-
-## ライセンス
-
-Riz は [MIT ライセンス](LICENSE) のもとで公開されているオープンソースソフトウェアです。
+MIT License.
