@@ -15,7 +15,7 @@ jobs:
       - name: Build Riz
         run: |
           gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz \
-            src/main.c src/lexer.c src/parser.c src/ast.c \
+            src/diagnostic.c src/main.c src/lexer.c src/parser.c src/ast.c \
             src/interpreter.c src/value.c src/environment.c \
             src/chunk.c src/compiler.c src/vm.c src/codegen.c -lm
 
@@ -27,3 +27,11 @@ jobs:
 
       - name: Build llama bridge plugin (.so)
         run: gcc -shared -O2 -Wall -Wextra -Isrc -o plugin_llama_cli.so examples/plugin_llama_cli.c
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Riz LSP (TypeScript)
+        working-directory: lsp
+        run: npm ci && npm run build

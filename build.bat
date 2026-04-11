@@ -9,6 +9,7 @@ echo   Building Riz...
 echo.
 
 gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz.exe ^
+    src/diagnostic.c ^
     src/main.c ^
     src/lexer.c ^
     src/parser.c ^

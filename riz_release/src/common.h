@@ -42,8 +42,10 @@
   #include <windows.h>
   #undef TokenType
   static inline void riz_enable_ansi(void) {
+      #ifdef _WIN32
       SetConsoleOutputCP(65001);
       SetConsoleCP(65001);
+      #endif
       HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
       DWORD mode = 0;
       GetConsoleMode(h, &mode);
@@ -69,10 +71,8 @@
 #define COL_ITALIC  "\033[3m"
 
 /* ─── Error Reporting ─────────────────────────────────── */
-#define riz_error(line, fmt, ...) \
-    fprintf(stderr, COL_RED COL_BOLD "Error" COL_RESET \
-            COL_RED " [line %d]: " fmt COL_RESET "\n", \
-            line, ##__VA_ARGS__)
+/* Parse errors (parser.c); machine mode for `riz check` — see diagnostic.c */
+void riz_error(int line, const char* fmt, ...);
 
 #define riz_runtime_error(fmt, ...) \
     fprintf(stderr, COL_RED COL_BOLD "RuntimeError: " COL_RESET \

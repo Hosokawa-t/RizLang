@@ -8,7 +8,7 @@ CFLAGS  ?= -Wall -Wextra -std=c11 -O2 -Isrc
 LDFLAGS ?= -lm
 RM      ?= rm -f
 
-SRC = src/main.c src/lexer.c src/parser.c src/ast.c \
+SRC = src/diagnostic.c src/main.c src/lexer.c src/parser.c src/ast.c \
       src/interpreter.c src/value.c src/environment.c \
       src/chunk.c src/compiler.c src/vm.c src/codegen.c
 
