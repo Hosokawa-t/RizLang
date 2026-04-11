@@ -15,23 +15,18 @@ gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz.exe ^
     src/interpreter.c ^
     src/value.c ^
     src/environment.c ^
+    src/chunk.c ^
+    src/compiler.c ^
+    src/vm.c ^
+    src/codegen.c ^
     -lm
 
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo   ✓ Build successful: riz.exe
     echo.
-    echo   Usage:
-    echo     riz              Start REPL
-    echo     riz file.riz     Execute a file
-    echo     riz --help       Show help
-    echo.
 ) else (
     echo.
     echo   ✗ Build failed!
-    echo.
-    echo   Make sure you have GCC installed:
-    echo     winget install -e --id GnuWin32.Make
-    echo     or install MinGW-w64 from https://www.mingw-w64.org/
     echo.
 )

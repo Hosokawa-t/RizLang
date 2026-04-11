@@ -341,7 +341,7 @@ int main(int argc, char* argv[]) {
         #endif
 
         printf(COL_DIM "[AOT] Generating C code: %s" COL_RESET "\n", c_path);
-        if (!codegen_emit(program, c_path, "riz_runtime.h")) {
+        if (!codegen_emit(program, c_path, "aot_runtime.h")) {
             fprintf(stderr, COL_RED "AOT code generation failed." COL_RESET "\n");
             ast_free(program); free(source); return 1;
         }
@@ -349,8 +349,8 @@ int main(int argc, char* argv[]) {
         /* Invoke GCC to compile the generated C to a native binary */
         char cmd[1024];
         snprintf(cmd, sizeof(cmd),
-            "gcc -O2 -std=c11 -I\"%s\" -o \"%s\" \"%s\" -lm",
-            "src", exe_path, c_path);
+            "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" -lm",
+            exe_path, c_path);
         printf(COL_DIM "[AOT] Compiling: %s" COL_RESET "\n", cmd);
         int ret = system(cmd);
         if (ret != 0) {

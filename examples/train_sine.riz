@@ -63,22 +63,22 @@ while epoch < epochs {
 
     # === Forward pass ===
     # Layer 1
-    let z1 = tensor_matmul(X, W1)
+    let z1 = X * W1
     let z1b = tensor_bias_add(z1, b1)
     let h1 = tensor_tanh(z1b)
 
     # Layer 2
-    let z2 = tensor_matmul(h1, W2)
+    let z2 = h1 * W2
     let z2b = tensor_bias_add(z2, b2)
     let h2 = tensor_tanh(z2b)
 
     # Layer 3 (output, no activation -- regression)
-    let z3 = tensor_matmul(h2, W3)
+    let z3 = h2 * W3
     let out = tensor_bias_add(z3, b3)
 
     # === Loss: MSE = sum((out - Y)^2) / n ===
-    let diff = tensor_sub(out, Y)
-    let sq = tensor_mul(diff, diff)
+    let diff = out - Y
+    let sq = tensor_mul(diff, diff) # element-wise
     let total = tensor_sum(sq)
     let loss = tensor_scale_div(total, n_samples)
 

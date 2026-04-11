@@ -65,16 +65,16 @@ static const char* emit_expr(ASTNode* node) {
 
     switch (node->type) {
         case NODE_INT_LIT:
-            snprintf(buf, sizeof(buf), "rv_int(%lldLL)", (long long)node->as.int_lit.value);
+            snprintf(buf, sizeof(buf), "riz_int(%lldLL)", (long long)node->as.int_lit.value);
             return buf;
 
         case NODE_FLOAT_LIT:
-            snprintf(buf, sizeof(buf), "rv_float(%.17g)", node->as.float_lit.value);
+            snprintf(buf, sizeof(buf), "riz_float(%.17g)", node->as.float_lit.value);
             return buf;
 
         case NODE_STRING_LIT: {
             int t = new_tmp();
-            ind(); fprintf(G.out, "RVal _t%d = rv_str(", t);
+            ind(); fprintf(G.out, "RizValue _t%d = riz_string(", t);
             emit_c_string(node->as.string_lit.value);
             fprintf(G.out, ");\n");
             snprintf(buf, sizeof(buf), "_t%d", t);
@@ -82,10 +82,10 @@ static const char* emit_expr(ASTNode* node) {
         }
 
         case NODE_BOOL_LIT:
-            return node->as.bool_lit.value ? "rv_bool(true)" : "rv_bool(false)";
+            return node->as.bool_lit.value ? "riz_bool(true)" : "riz_bool(false)";
 
         case NODE_NONE_LIT:
-            return "rv_none()";
+            return "riz_none()";
 
         case NODE_IDENTIFIER:
             snprintf(buf, sizeof(buf), "%s", node->as.identifier.name);
@@ -96,68 +96,72 @@ static const char* emit_expr(ASTNode* node) {
             int t = new_tmp();
             ind();
             if (node->as.unary.op == TOK_MINUS)
-                fprintf(G.out, "RVal _t%d = rv_neg(%s);\n", t, operand);
+                fprintf(G.out, "RizValue _t%d = aot_neg(%s);\n", t, operand);
             else if (node->as.unary.op == TOK_NOT)
-                fprintf(G.out, "RVal _t%d = rv_bool(!rv_truthy(%s));\n", t, operand);
+                fprintf(G.out, "RizValue _t%d = riz_bool(!riz_value_is_truthy(%s));\n", t, operand);
             else
-                fprintf(G.out, "RVal _t%d = %s;\n", t, operand);
+                fprintf(G.out, "RizValue _t%d = %s;\n", t, operand);
             snprintf(buf, sizeof(buf), "_t%d", t);
             return buf;
         }
 
         case NODE_BINARY: {
             const char* left_name  = emit_expr(node->as.binary.left);
-            /* Copy to local to avoid clobbering static buf */
-            char left_buf[64];
-            strncpy(left_buf, left_name, 63); left_buf[63] = '\0';
+            char left_buf[64]; strncpy(left_buf, left_name, 63); left_buf[63] = '\0';
             const char* right_name = emit_expr(node->as.binary.right);
-            char right_buf[64];
-            strncpy(right_buf, right_name, 63); right_buf[63] = '\0';
+            char right_buf[64]; strncpy(right_buf, right_name, 63); right_buf[63] = '\0';
 
             int t = new_tmp();
             ind();
             switch (node->as.binary.op) {
-                case TOK_PLUS:      fprintf(G.out, "RVal _t%d = rv_add(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_MINUS:     fprintf(G.out, "RVal _t%d = rv_sub(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_STAR:      fprintf(G.out, "RVal _t%d = rv_mul(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_SLASH:     fprintf(G.out, "RVal _t%d = rv_div(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_PERCENT:   fprintf(G.out, "RVal _t%d = rv_mod(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_FLOOR_DIV: fprintf(G.out, "RVal _t%d = rv_idiv(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_POWER:     fprintf(G.out, "RVal _t%d = rv_pow(%s, %s);\n", t, left_buf, right_buf); break;
-                case TOK_EQ:        fprintf(G.out, "RVal _t%d = rv_bool(rv_eq(%s, %s));\n", t, left_buf, right_buf); break;
-                case TOK_NEQ:       fprintf(G.out, "RVal _t%d = rv_bool(!rv_eq(%s, %s));\n", t, left_buf, right_buf); break;
-                case TOK_LT:        fprintf(G.out, "RVal _t%d = rv_bool(rv_num(%s) < rv_num(%s));\n", t, left_buf, right_buf); break;
-                case TOK_LTE:       fprintf(G.out, "RVal _t%d = rv_bool(rv_num(%s) <= rv_num(%s));\n", t, left_buf, right_buf); break;
-                case TOK_GT:        fprintf(G.out, "RVal _t%d = rv_bool(rv_num(%s) > rv_num(%s));\n", t, left_buf, right_buf); break;
-                case TOK_GTE:       fprintf(G.out, "RVal _t%d = rv_bool(rv_num(%s) >= rv_num(%s));\n", t, left_buf, right_buf); break;
-                case TOK_AND:       fprintf(G.out, "RVal _t%d = rv_bool(rv_truthy(%s) && rv_truthy(%s));\n", t, left_buf, right_buf); break;
-                case TOK_OR:        fprintf(G.out, "RVal _t%d = rv_bool(rv_truthy(%s) || rv_truthy(%s));\n", t, left_buf, right_buf); break;
-                default:            fprintf(G.out, "RVal _t%d = rv_none(); /* unsupported op */\n", t); break;
+                case TOK_PLUS:      fprintf(G.out, "RizValue _t%d = aot_add(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_MINUS:     fprintf(G.out, "RizValue _t%d = aot_sub(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_STAR:      fprintf(G.out, "RizValue _t%d = aot_mul(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_SLASH:     fprintf(G.out, "RizValue _t%d = aot_div(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_PERCENT:   fprintf(G.out, "RizValue _t%d = aot_mod(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_FLOOR_DIV: fprintf(G.out, "RizValue _t%d = aot_idiv(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_POWER:     fprintf(G.out, "RizValue _t%d = aot_pow(%s, %s);\n", t, left_buf, right_buf); break;
+                case TOK_EQ:        fprintf(G.out, "RizValue _t%d = riz_bool(riz_value_equal(%s, %s));\n", t, left_buf, right_buf); break;
+                case TOK_NEQ:       fprintf(G.out, "RizValue _t%d = riz_bool(!riz_value_equal(%s, %s));\n", t, left_buf, right_buf); break;
+                case TOK_LT:        fprintf(G.out, "RizValue _t%d = riz_bool(aot_num(%s) < aot_num(%s));\n", t, left_buf, right_buf); break;
+                case TOK_LTE:       fprintf(G.out, "RizValue _t%d = riz_bool(aot_num(%s) <= aot_num(%s));\n", t, left_buf, right_buf); break;
+                case TOK_GT:        fprintf(G.out, "RizValue _t%d = riz_bool(aot_num(%s) > aot_num(%s));\n", t, left_buf, right_buf); break;
+                case TOK_GTE:       fprintf(G.out, "RizValue _t%d = riz_bool(aot_num(%s) >= aot_num(%s));\n", t, left_buf, right_buf); break;
+                case TOK_AND:       fprintf(G.out, "RizValue _t%d = riz_bool(riz_value_is_truthy(%s) && riz_value_is_truthy(%s));\n", t, left_buf, right_buf); break;
+                case TOK_OR:        fprintf(G.out, "RizValue _t%d = riz_bool(riz_value_is_truthy(%s) || riz_value_is_truthy(%s));\n", t, left_buf, right_buf); break;
+                default:            fprintf(G.out, "RizValue _t%d = riz_none();\n", t); break;
             }
             snprintf(buf, sizeof(buf), "_t%d", t);
             return buf;
         }
 
         case NODE_CALL: {
-            /* print() is special */
+            char arg_names[32][64];
+            int argc = node->as.call.arg_count;
+            for (int i = 0; i < argc; i++) {
+                const char* n = emit_expr(node->as.call.args[i]);
+                strncpy(arg_names[i], n, 63); arg_names[i][63] = '\0';
+            }
+            
             if (node->as.call.callee->type == NODE_IDENTIFIER &&
                 strcmp(node->as.call.callee->as.identifier.name, "print") == 0) {
-                /* Emit each arg, then call rv_print */
-                char arg_names[32][64];
-                int argc = node->as.call.arg_count;
-                for (int i = 0; i < argc; i++) {
-                    const char* n = emit_expr(node->as.call.args[i]);
-                    strncpy(arg_names[i], n, 63); arg_names[i][63] = '\0';
-                }
-                ind(); fprintf(G.out, "rv_print(%d", argc);
+                ind(); fprintf(G.out, "aot_print(%d", argc);
                 for (int i = 0; i < argc; i++) fprintf(G.out, ", %s", arg_names[i]);
                 fprintf(G.out, ");\n");
-                return "rv_none()";
+                return "riz_none()";
             }
-            /* Generic function call — not yet supported in AOT */
-            fprintf(stderr, "[codegen] Function calls (non-print) not yet supported in AOT\n");
-            G.had_error = true;
-            return "rv_none()";
+            
+            /* Assuming callee is a literal string identifier matching a plugin function */
+            const char* callee_name = node->as.call.callee->as.identifier.name;
+            int t = new_tmp();
+            ind(); fprintf(G.out, "RizValue _args%d[] = {", t);
+            for (int i = 0; i < argc; i++) {
+                fprintf(G.out, "%s%s", (i > 0) ? ", " : "", arg_names[i]);
+            }
+            fprintf(G.out, "};\n");
+            ind(); fprintf(G.out, "RizValue _t%d = aot_call_plugin(\"%s\", %d, _args%d);\n", t, callee_name, argc, t);
+            snprintf(buf, sizeof(buf), "_t%d", t);
+            return buf;
         }
 
         case NODE_ASSIGN: {
@@ -176,21 +180,41 @@ static const char* emit_expr(ASTNode* node) {
             int t = new_tmp();
             ind();
             switch (node->as.compound_assign.op) {
-                case TOK_PLUS_ASSIGN:  fprintf(G.out, "RVal _t%d = rv_add(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
-                case TOK_MINUS_ASSIGN: fprintf(G.out, "RVal _t%d = rv_sub(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
-                case TOK_STAR_ASSIGN:  fprintf(G.out, "RVal _t%d = rv_mul(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
-                case TOK_SLASH_ASSIGN: fprintf(G.out, "RVal _t%d = rv_div(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
-                default: fprintf(G.out, "RVal _t%d = rv_none();\n", t); break;
+                case TOK_PLUS_ASSIGN:  fprintf(G.out, "RizValue _t%d = aot_add(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
+                case TOK_MINUS_ASSIGN: fprintf(G.out, "RizValue _t%d = aot_sub(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
+                case TOK_STAR_ASSIGN:  fprintf(G.out, "RizValue _t%d = aot_mul(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
+                case TOK_SLASH_ASSIGN: fprintf(G.out, "RizValue _t%d = aot_div(%s, %s);\n", t, node->as.compound_assign.name, val_buf); break;
+                default: fprintf(G.out, "RizValue _t%d = riz_none();\n", t); break;
             }
             ind(); fprintf(G.out, "%s = _t%d;\n", node->as.compound_assign.name, t);
             snprintf(buf, sizeof(buf), "%s", node->as.compound_assign.name);
             return buf;
         }
 
+        case NODE_INDEX: {
+            const char* obj = emit_expr(node->as.index_expr.object);
+            char obj_buf[64]; strncpy(obj_buf, obj, 63); obj_buf[63] = '\0';
+            const char* idx = emit_expr(node->as.index_expr.index);
+            char idx_buf[64]; strncpy(idx_buf, idx, 63); idx_buf[63] = '\0';
+            int t = new_tmp();
+            ind(); fprintf(G.out, "RizValue _t%d = aot_index(%s, %s);\n", t, obj_buf, idx_buf);
+            snprintf(buf, sizeof(buf), "_t%d", t);
+            return buf;
+        }
+
+        case NODE_MEMBER:
+        case NODE_PIPE:
+        case NODE_LAMBDA:
+        case NODE_LIST_LIT:
+        case NODE_DICT_LIT:
+        case NODE_MATCH_EXPR:
+            fprintf(stderr, "[codegen] Skipping unsupported expr type %d\n", node->type);
+            return "riz_none()";
+
         default:
             fprintf(stderr, "[codegen] Unhandled expr node %d\n", node->type);
             G.had_error = true;
-            return "rv_none()";
+            return "riz_none()";
     }
 }
 
@@ -210,11 +234,15 @@ static void emit_stmt(ASTNode* node) {
             emit_expr(node->as.expr_stmt.expr);
             break;
 
+        case NODE_FN_DECL:
+            /* Hoisted to top level in AOT. Handled in pre-passes. */
+            break;
+
         case NODE_LET_DECL: {
             const char* val = emit_expr(node->as.let_decl.initializer);
             char val_buf[64];
             strncpy(val_buf, val, 63); val_buf[63] = '\0';
-            ind(); fprintf(G.out, "RVal %s = %s;\n", node->as.let_decl.name, val_buf);
+            ind(); fprintf(G.out, "RizValue %s = %s;\n", node->as.let_decl.name, val_buf);
             break;
         }
 
@@ -240,7 +268,7 @@ static void emit_stmt(ASTNode* node) {
             const char* cond = emit_expr(node->as.if_stmt.condition);
             char cond_buf[64];
             strncpy(cond_buf, cond, 63); cond_buf[63] = '\0';
-            ind(); fprintf(G.out, "if (rv_truthy(%s)) ", cond_buf);
+            ind(); fprintf(G.out, "if (riz_value_is_truthy(%s)) ", cond_buf);
             if (node->as.if_stmt.then_branch->type == NODE_BLOCK) {
                 emit_stmt(node->as.if_stmt.then_branch);
             } else {
@@ -265,7 +293,7 @@ static void emit_stmt(ASTNode* node) {
             const char* cond = emit_expr(node->as.while_stmt.condition);
             char cond_buf[64];
             strncpy(cond_buf, cond, 63); cond_buf[63] = '\0';
-            ind(); fprintf(G.out, "if (!rv_truthy(%s)) break;\n", cond_buf);
+            ind(); fprintf(G.out, "if (!riz_value_is_truthy(%s)) break;\n", cond_buf);
             if (node->as.while_stmt.body->type == NODE_BLOCK) {
                 for (int i = 0; i < node->as.while_stmt.body->as.block.count; i++)
                     emit_stmt(node->as.while_stmt.body->as.block.statements[i]);
@@ -300,14 +328,70 @@ static void emit_stmt(ASTNode* node) {
                 const char* v = emit_expr(node->as.return_stmt.value);
                 ind(); fprintf(G.out, "return %s;\n", v);
             } else {
-                ind(); fprintf(G.out, "return rv_none();\n");
+                ind(); fprintf(G.out, "return riz_none();\n");
             }
+            break;
+        }
+        
+        case NODE_IMPORT_NATIVE: {
+            ind(); fprintf(G.out, "aot_load_plugin(\"%s\");\n", node->as.import_native.path);
             break;
         }
 
         default:
             ind(); fprintf(G.out, "/* [codegen] skipped node type %d */\n", node->type);
             break;
+    }
+}
+
+/* ─── AOT Function Passes ──────────────────────────────── */
+
+static void emit_fn_prototypes(ASTNode* node) {
+    if (!node) return;
+    if (node->type == NODE_PROGRAM) {
+        for (int i = 0; i < node->as.program.count; i++) emit_fn_prototypes(node->as.program.declarations[i]);
+    } else if (node->type == NODE_BLOCK) {
+        for (int i = 0; i < node->as.block.count; i++) emit_fn_prototypes(node->as.block.statements[i]);
+    } else if (node->type == NODE_FN_DECL) {
+        fprintf(G.out, "RizValue userfn_%s(RizValue* args, int argc);\n", node->as.fn_decl.name);
+    }
+}
+
+static void emit_fn_bodies(ASTNode* node) {
+    if (!node) return;
+    if (node->type == NODE_PROGRAM) {
+        for (int i = 0; i < node->as.program.count; i++) emit_fn_bodies(node->as.program.declarations[i]);
+    } else if (node->type == NODE_BLOCK) {
+        for (int i = 0; i < node->as.block.count; i++) emit_fn_bodies(node->as.block.statements[i]);
+    } else if (node->type == NODE_FN_DECL) {
+        fprintf(G.out, "RizValue userfn_%s(RizValue* args, int argc) {\n", node->as.fn_decl.name);
+        G.indent = 1;
+        ind(); fprintf(G.out, "if (argc != %d) { fprintf(stderr, \"[AOT] Arity mismatch in %s\\n\"); return riz_none(); }\n", node->as.fn_decl.param_count, node->as.fn_decl.name);
+        for (int i = 0; i < node->as.fn_decl.param_count; i++) {
+            ind(); fprintf(G.out, "RizValue %s = args[%d];\n", node->as.fn_decl.params[i], i);
+        }
+        if (node->as.fn_decl.body) {
+            if (node->as.fn_decl.body->type == NODE_BLOCK) {
+                int count = node->as.fn_decl.body->as.block.count;
+                for (int i = 0; i < count; i++) emit_stmt(node->as.fn_decl.body->as.block.statements[i]);
+            } else {
+                emit_stmt(node->as.fn_decl.body);
+            }
+        }
+        ind(); fprintf(G.out, "return riz_none();\n");
+        G.indent = 0;
+        fprintf(G.out, "}\n\n");
+    }
+}
+
+static void emit_fn_registrations(ASTNode* node) {
+    if (!node) return;
+    if (node->type == NODE_PROGRAM) {
+        for (int i = 0; i < node->as.program.count; i++) emit_fn_registrations(node->as.program.declarations[i]);
+    } else if (node->type == NODE_BLOCK) {
+        for (int i = 0; i < node->as.block.count; i++) emit_fn_registrations(node->as.block.statements[i]);
+    } else if (node->type == NODE_FN_DECL) {
+        ind(); fprintf(G.out, "aot_register_user_fn(\"%s\", userfn_%s, %d);\n", node->as.fn_decl.name, node->as.fn_decl.name, node->as.fn_decl.param_count);
     }
 }
 
@@ -319,14 +403,21 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
         fprintf(stderr, "Cannot open output file '%s'\n", output_path);
         return false;
     }
-    G.indent = 1;
+    G.indent = 0;
     G.tmp_counter = 0;
     G.had_error = false;
 
     /* ── Emit file header ── */
     fprintf(G.out, "/*\n * Generated by Riz AOT Compiler\n * Source → C → Native Binary\n */\n\n");
     fprintf(G.out, "#include \"%s\"\n\n", runtime_path);
+    
+    emit_fn_prototypes(program);
+    fprintf(G.out, "\n");
+    emit_fn_bodies(program);
+
+    G.indent = 1;
     fprintf(G.out, "int main(void) {\n");
+    emit_fn_registrations(program);
 
     /* ── Emit body ── */
     emit_stmt(program);

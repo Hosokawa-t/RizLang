@@ -778,6 +778,27 @@ static RizValue eval_binary(Interpreter* I, ASTNode* node) {
     RizValue left = eval(I, node->as.binary.left);
     RizValue right = eval(I, node->as.binary.right);
 
+    /* Tensor / Native Operator Intercept */
+    if (left.type == VAL_NATIVE_PTR || right.type == VAL_NATIVE_PTR) {
+        if ((left.type != VAL_NATIVE_PTR || strcmp(left.as.native_ptr->type_tag, "Tensor") == 0) &&
+            (right.type != VAL_NATIVE_PTR || strcmp(right.as.native_ptr->type_tag, "Tensor") == 0)) {
+            const char* op_fn = NULL;
+            if (op == TOK_PLUS)  op_fn = "tensor_add";
+            if (op == TOK_MINUS) op_fn = "tensor_sub";
+            if (op == TOK_STAR)  op_fn = "tensor_matmul";
+            
+            if (op_fn) {
+                RizValue ffi_fn;
+                if (env_get(I->globals, op_fn, &ffi_fn)) {
+                    if (ffi_fn.type == VAL_NATIVE_FN) {
+                        RizValue args[2] = {left, right};
+                        return ffi_fn.as.native->fn(args, 2);
+                    }
+                }
+            }
+        }
+    }
+
     /* String concatenation */
     if (op==TOK_PLUS && left.type==VAL_STRING && right.type==VAL_STRING) {
         size_t la=strlen(left.as.string),lb=strlen(right.as.string);
