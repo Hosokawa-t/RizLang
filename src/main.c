@@ -318,8 +318,15 @@ int main(int argc, char* argv[]) {
         return run_file_vm(argv[2]);
     }
 
-    /* --aot input.riz : AOT compile to native binary */
-    if (argc == 3 && strcmp(argv[1], "--aot") == 0) {
+    /* --aot input.riz [--tcc | --gcc] : AOT compile to native binary */
+    if (argc >= 3 && strcmp(argv[1], "--aot") == 0) {
+        bool force_tcc = false;
+        bool force_gcc = false;
+        if (argc >= 4) {
+            if (strcmp(argv[3], "--tcc") == 0) force_tcc = true;
+            if (strcmp(argv[3], "--gcc") == 0) force_gcc = true;
+        }
+        
         char* source = read_file(argv[2]);
         if (!source) return 1;
 
@@ -346,15 +353,38 @@ int main(int argc, char* argv[]) {
             ast_free(program); free(source); return 1;
         }
 
-        /* Invoke GCC to compile the generated C to a native binary */
+        /* Resolve the compiler */
+        bool use_gcc = false;
+        if (force_gcc) {
+            use_gcc = true;
+        } else if (force_tcc) {
+            use_gcc = false;
+        } else {
+            /* Try to detect GCC */
+            #ifdef _WIN32
+            int gcc_ret = system("gcc --version > NUL 2>&1");
+            #else
+            int gcc_ret = system("gcc --version > /dev/null 2>&1");
+            #endif
+            use_gcc = (gcc_ret == 0);
+        }
+        
+        /* Invoke Compiler to build the generated C to a native binary */
         char cmd[1024];
-        snprintf(cmd, sizeof(cmd),
-            "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" -lm",
-            exe_path, c_path);
+        if (use_gcc) {
+            snprintf(cmd, sizeof(cmd),
+                "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" -lm",
+                exe_path, c_path);
+        } else {
+            snprintf(cmd, sizeof(cmd),
+                "vendor\\tcc\\tcc.exe -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\"",
+                exe_path, c_path);
+        }
+        
         printf(COL_DIM "[AOT] Compiling: %s" COL_RESET "\n", cmd);
         int ret = system(cmd);
         if (ret != 0) {
-            fprintf(stderr, COL_RED "GCC compilation failed (exit %d)" COL_RESET "\n", ret);
+            fprintf(stderr, COL_RED "%s compilation failed (exit %d)" COL_RESET "\n", use_gcc ? "GCC" : "TCC", ret);
             ast_free(program); free(source); return 1;
         }
         printf(COL_GREEN COL_BOLD "[AOT] ✓ Native binary: %s" COL_RESET "\n", exe_path);

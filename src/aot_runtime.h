@@ -113,16 +113,18 @@ static inline RizValue aot_index(RizValue obj, RizValue idx) {
 }
 
 /* Helpers */
+#include <stdarg.h>
+
 static inline void aot_print(int n, ...) {
-    __builtin_va_list ap;
-    __builtin_va_start(ap, n);
+    va_list ap;
+    va_start(ap, n);
     for (int i = 0; i < n; i++) {
-        RizValue v = __builtin_va_arg(ap, RizValue);
+        RizValue v = va_arg(ap, RizValue);
         if (i > 0) printf(" ");
         riz_value_print(v);
     }
     printf("\n");
-    __builtin_va_end(ap);
+    va_end(ap);
 }
 
 #endif

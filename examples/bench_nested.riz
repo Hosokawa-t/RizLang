@@ -1,9 +1,9 @@
-mut count = 0
-mut i = 1
-while i <= 200 {
-    mut j = 1
-    while j <= 200 {
-        mut k = 1
+mut count: int = 0
+mut i: int = 1
+while i <= 1000 {
+    mut j: int = 1
+    while j <= 1000 {
+        mut k: int = 1
         while k <= 200 {
             count = count + 1
             k = k + 1
