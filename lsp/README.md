@@ -35,3 +35,7 @@ Optional setting (if your client forwards it to the server):
 - `riz.executablePath` — full path to `riz` / `riz.exe` (same as `RIZ_PATH`).
 
 Register `*.riz` as a language if you want file-type detection; until a grammar exists, **Plain Text** + diagnostics still works.
+
+## VS Code / Cursor extension
+
+Use the **`editors/riz-vscode`** workspace (see `editors/riz-vscode/README.md`) for syntax + automatic LSP startup when you open `.riz` files.

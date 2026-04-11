@@ -1,0 +1,83 @@
+{
+  "name": "riz",
+  "displayName": "Riz",
+  "description": "Riz language support (syntax + LSP diagnostics via riz check)",
+  "version": "0.1.0",
+  "publisher": "riz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hosokawa-t/riz.git"
+  },
+  "keywords": [
+    "riz",
+    "language",
+    "lsp"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:riz"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "riz",
+        "aliases": [
+          "Riz",
+          "riz"
+        ],
+        "extensions": [
+          ".riz"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "riz",
+        "scopeName": "source.riz",
+        "path": "./syntaxes/riz.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Riz",
+      "properties": {
+        "riz.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Full path to the Riz interpreter (riz / riz.exe). Passed to the language server for `riz check`. Leave empty to use RIZ_PATH or PATH."
+        },
+        "riz.lspServerScript": {
+          "type": "string",
+          "default": "",
+          "description": "Path to lsp/out/server.js. If empty, the extension looks in the workspace (lsp/out/server.js) then bundled/server/out/server.js."
+        },
+        "riz.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Node.js binary. Empty = use the same Node that runs the extension host."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile && node ./scripts/bundle-server.cjs",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

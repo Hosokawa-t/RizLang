@@ -1,0 +1,60 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Riz",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.riz",
+          "match": "#.*",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.riz" }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.riz",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.riz", "match": "\\\\." }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.riz",
+          "match": "\\b(if|else|while|for|in|return|break|continue|try|catch|throw|import_native|import)\\b"
+        },
+        {
+          "name": "keyword.declaration.riz",
+          "match": "\\b(fn|let|mut|struct|trait|impl|enum)\\b"
+        },
+        {
+          "name": "constant.language.riz",
+          "match": "\\b(true|false|none)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.riz",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.riz"
+}

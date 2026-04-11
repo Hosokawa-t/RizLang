@@ -22,6 +22,20 @@ let rizExecutable = process.env.RIZ_PATH?.trim() || (process.platform === "win32
 const debounceMs = 200;
 const debouncers = new Map<string, ReturnType<typeof setTimeout>>();
 
+async function refreshRizExecutableFromWorkspace(): Promise<void> {
+  try {
+    const cfg = await connection.workspace.getConfiguration("riz");
+    const p = cfg.get("executablePath") as string | undefined;
+    if (p && typeof p === "string" && p.trim()) {
+      rizExecutable = p.trim();
+      return;
+    }
+  } catch {
+    /* no workspace configuration client */
+  }
+  rizExecutable = process.env.RIZ_PATH?.trim() || (process.platform === "win32" ? "riz.exe" : "riz");
+}
+
 connection.onInitialize((): InitializeResult => {
   return {
     capabilities: {
@@ -30,13 +44,12 @@ connection.onInitialize((): InitializeResult => {
   };
 });
 
-connection.onDidChangeConfiguration((change) => {
-  const s = change.settings as { riz?: { executablePath?: string } } | undefined;
-  const p = s?.riz?.executablePath;
-  if (p && typeof p === "string" && p.trim()) rizExecutable = p.trim();
+connection.onDidChangeConfiguration(() => {
+  void refreshRizExecutableFromWorkspace();
 });
 
 async function validateDocument(doc: TextDocument): Promise<Diagnostic[]> {
+  await refreshRizExecutableFromWorkspace();
   const text = doc.getText();
   const safe = doc.uri.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(-80);
   const tmp = path.join(os.tmpdir(), `riz-lsp-${process.pid}-${safe}.riz`);

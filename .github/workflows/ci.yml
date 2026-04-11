@@ -35,3 +35,7 @@ jobs:
       - name: Build Riz LSP (TypeScript)
         working-directory: lsp
         run: npm ci && npm run build
+
+      - name: Build Riz VS Code extension
+        working-directory: editors/riz-vscode
+        run: npm ci && npm run compile
