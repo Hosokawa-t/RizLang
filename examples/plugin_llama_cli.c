@@ -1,8 +1,8 @@
 /*
  * Riz plugin — llama.cpp CLI bridge (GGUF inference)
  *
- * Invokes a user-built llama.cpp `llama-cli` (or compatible) with -m / -f / -n.
- * Uses popen (stdout only). No llama.cpp code is linked; binary on PATH or LLAMA_CLI.
+ * Invokes llama.cpp `llama-completion` (batch) with -m / -f / -n / --simple-io.
+ * Override with LLAMA_CLI or llama_set_cli() to use another binary (e.g. older llama-cli).
  *
  * Build (MinGW / MSYS2, from repo root):
  *   gcc -shared -O2 -Isrc -o plugin_llama_cli.dll examples/plugin_llama_cli.c
@@ -26,8 +26,12 @@
 
 static RizPluginAPI G;
 
-/* Executable: default "llama-cli"; override with env LLAMA_CLI or llama_set_cli(). */
-static char g_llama_exe[1024] = "llama-cli";
+/* Default: llama-completion (batch). llama-cli b8761+ rejects -no-cnv; use completion binary. */
+#ifdef _WIN32
+static char g_llama_exe[1024] = "llama-completion.exe";
+#else
+static char g_llama_exe[1024] = "llama-completion";
+#endif
 
 static const char* arg_str(RizPluginValue v) {
     if (v.type == VAL_STRING && v.as.string) return v.as.string;
@@ -143,7 +147,7 @@ static RizPluginValue native_llama_set_cli(RizPluginValue* args, int argc) {
 
 /*
  * llama_infer(model_path, prompt, max_tokens) -> string
- * Runs: llama-cli -m MODEL -f PROMPT_FILE -n N
+ * Runs: llama-completion -m MODEL -f PROMPT_FILE -n N --simple-io --log-verbosity 0
  */
 static RizPluginValue native_llama_infer(RizPluginValue* args, int argc) {
     if (argc < 3) return G.make_string("[llama_infer] need (model_path, prompt, max_tokens)");
@@ -180,11 +184,14 @@ static RizPluginValue native_llama_infer(RizPluginValue* args, int argc) {
         snprintf(nbuf, sizeof(nbuf), "%lld", (long long)max_tok);
         append_shell_arg(cmd, &pos, sizeof(cmd), nbuf);
     }
+    append_shell_arg(cmd, &pos, sizeof(cmd), "--simple-io");
+    append_shell_arg(cmd, &pos, sizeof(cmd), "--log-verbosity");
+    append_shell_arg(cmd, &pos, sizeof(cmd), "0");
 
     FILE* fp = popen(cmd, "r");
     if (!fp) {
         rm_if_exists(prompt_path);
-        return G.make_string("[llama_infer] popen failed (is llama-cli on PATH?)");
+        return G.make_string("[llama_infer] popen failed (is llama-completion on PATH?)");
     }
 
     size_t out_len = 0;
@@ -197,7 +204,7 @@ static RizPluginValue native_llama_infer(RizPluginValue* args, int argc) {
         if (body) free(body);
         char err[512];
         snprintf(err, sizeof(err),
-                 "[llama_infer] empty stdout (exit %d). Check model path and llama-cli.\n",
+                 "[llama_infer] empty stdout (exit %d). Check model path and llama-completion.\n",
                  rc);
         return G.make_string(err);
     }

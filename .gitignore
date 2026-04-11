@@ -7,6 +7,9 @@
 *.dylib
 *_aot.c
 *.zip
+# Local llama.cpp test payloads (see tools/llama_test/run_infer.riz)
+/tools/llama_test/*.gguf
+/tools/llama_test/llama-bin.zip
 deps/libtorch
 build_torch/
 plugin_torch.dll

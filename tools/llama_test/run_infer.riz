@@ -1,0 +1,11 @@
+# One-shot local inference test (paths under tools/llama_test)
+import_native "plugin_llama_cli.dll"
+
+llama_set_cli("d:\\Riz\\tools\\llama_test\\bin\\llama-completion.exe")
+
+let out = llama_infer(
+    "d:\\Riz\\tools\\llama_test\\teeny.gguf",
+    "What is 2+2? Reply with one digit only.",
+    64
+)
+print(out)
