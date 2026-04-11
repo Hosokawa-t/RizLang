@@ -1,5 +1,8 @@
 # Riz Programming Language
 
+[Read in Japanese (日本語)](#riz-プログラミング言語-japanese)
+
+
 Riz is a high-performance, statically typed yet dynamically executed programming language designed for AI development, offering a clean syntax inspired by Modern languages. It prioritizes speed, minimal dependencies, and native interoperability.
 
 ## Features
@@ -42,6 +45,10 @@ riz --aot example.riz
 ## Architecture
 
 Riz separates execution into a front-end (Lexer, Parser, AST) and multiple back-ends. The recent addition of a Register-based VM and an AOT transpilation pipeline allows Riz scripts to execute faster than conventional interpreted languages like Python while maintaining script-like development agility.
+
+## License
+
+Riz is open-sourced software licensed under the [MIT License](LICENSE).
 
 ---
 
@@ -89,3 +96,7 @@ riz --aot example.riz
 ## アーキテクチャ
 
 Rizはフロントエンド（字句解析、構文解析、抽象構文木）と複数のバックエンドに処理が分離されています。新たに実装されたレジスタVMとAOTコンパイラにより、スクリプト言語のような手軽さを保ちながら、従来のインタプリタ言語（Pythonなど）を大幅に凌駕する実行速度を実現しています。
+
+## ライセンス
+
+Riz は [MIT ライセンス](LICENSE) のもとで公開されているオープンソースソフトウェアです。
