@@ -18,3 +18,5 @@ fn fizzbuzz(n) {
 print("FizzBuzz 1-30:")
 print("─────────────")
 fizzbuzz(30)
+
+input()

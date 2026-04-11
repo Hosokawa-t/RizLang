@@ -19,3 +19,5 @@ print("  Circle area (r=5):", PI * 5 ** 2)
 
 print("")
 print("Import system working! ✓")
+
+input()

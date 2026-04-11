@@ -8,3 +8,5 @@ mut ptr: Memory = 0
 mut tensor: Tensor = 0
 tensor.size = 100
 tensor.data = 0
+
+input()

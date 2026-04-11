@@ -26,3 +26,5 @@ let h2 = attention(h1, W2)
 
 print("H2 Output Phase Completed!")
 print("Network fully defined using AOT user-defined functions.")
+
+input()

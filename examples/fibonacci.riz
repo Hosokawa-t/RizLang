@@ -33,3 +33,5 @@ fn fib_iter(n) {
 print("\nFibonacci (iterative):")
 print("  fib(30) =", fib_iter(30))
 print("  fib(50) =", fib_iter(50))
+
+input()
