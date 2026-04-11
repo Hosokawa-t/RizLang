@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, release]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Riz
+        run: |
+          gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz \
+            src/main.c src/lexer.c src/parser.c src/ast.c \
+            src/interpreter.c src/value.c src/environment.c \
+            src/chunk.c src/compiler.c src/vm.c src/codegen.c -lm
+
+      - name: Smoke — interpreter
+        run: ./riz examples/hello.riz
+
+      - name: Smoke — VM
+        run: ./riz --vm examples/vm_test.riz
+
+      - name: Build llama bridge plugin (.so)
+        run: gcc -shared -O2 -Wall -Wextra -Isrc -o plugin_llama_cli.so examples/plugin_llama_cli.c

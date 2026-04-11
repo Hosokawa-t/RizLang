@@ -1,51 +1,39 @@
-# Riz Language Build System
-# Usage:
-#   make          — Build riz.exe
-#   make clean    — Remove build artifacts
-#   make run      — Build and start REPL
-#   make test     — Build and run examples
+# Riz — GNU Make (Linux/macOS; MSYS2 on Windows)
+#   make          Build interpreter
+#   make clean    Remove binary
+#   make test     Smoke tests
 
-CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -O2 -Isrc
-LDFLAGS = -lm
+CC      ?= gcc
+CFLAGS  ?= -Wall -Wextra -std=c11 -O2 -Isrc
+LDFLAGS ?= -lm
+RM      ?= rm -f
 
 SRC = src/main.c src/lexer.c src/parser.c src/ast.c \
-      src/interpreter.c src/value.c src/environment.c
+      src/interpreter.c src/value.c src/environment.c \
+      src/chunk.c src/compiler.c src/vm.c src/codegen.c
 
-OUT = riz.exe
+OUT = riz
 
-.PHONY: all clean run test
+.PHONY: all clean run test plugin_llama
 
 all: $(OUT)
 
 $(OUT): $(SRC)
 	$(CC) $(CFLAGS) -o $(OUT) $(SRC) $(LDFLAGS)
-	@echo.
-	@echo   Build successful: $(OUT)
-	@echo.
 
 clean:
-	@if exist $(OUT) del $(OUT)
-	@echo   Cleaned.
+	$(RM) $(OUT) plugin_llama_cli.so
 
 run: $(OUT)
-	@$(OUT)
+	./$(OUT)
 
 test: $(OUT)
-	@echo === Running hello.riz ===
-	@$(OUT) examples/hello.riz
-	@echo.
-	@echo === Running fibonacci.riz ===
-	@$(OUT) examples/fibonacci.riz
-	@echo.
-	@echo === Running fizzbuzz.riz ===
-	@$(OUT) examples/fizzbuzz.riz
-	@echo.
-	@echo === Running demo.riz ===
-	@$(OUT) examples/demo.riz
-	@echo.
-	@echo All tests passed!
+	./$(OUT) examples/hello.riz
+	./$(OUT) --vm examples/vm_test.riz
+
+# Optional: llama.cpp bridge (Linux .so)
+plugin_llama: $(OUT)
+	$(CC) -shared -O2 $(CFLAGS) -o plugin_llama_cli.so examples/plugin_llama_cli.c
 
 debug: $(SRC)
-	$(CC) -Wall -Wextra -std=c11 -g -O0 -Isrc -o riz_debug.exe $(SRC) $(LDFLAGS)
-	@echo   Debug build: riz_debug.exe
+	$(CC) -Wall -Wextra -std=c11 -g -O0 -Isrc -o riz_debug $(SRC) $(LDFLAGS)
