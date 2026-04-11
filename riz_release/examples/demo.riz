@@ -1,0 +1,135 @@
+# ─── Riz Feature Demo ────────────────────────
+# Showcasing the power of the Riz language
+
+print("═══════════════════════════════════")
+print("   Riz Language Feature Demo")
+print("═══════════════════════════════════")
+
+# ─── Variables & Types ───
+print("\n▸ Variables & Types")
+let name = "Riz"
+let version = 0.1
+let is_awesome = true
+let nothing = none
+
+print("  name:", name, "(" + type(name) + ")")
+print("  version:", version, "(" + type(version) + ")")
+print("  is_awesome:", is_awesome, "(" + type(is_awesome) + ")")
+print("  nothing:", nothing, "(" + type(nothing) + ")")
+
+# ─── Arithmetic ───
+print("\n▸ Arithmetic")
+print("  2 ** 10 =", 2 ** 10)
+print("  17 // 3 =", 17 // 3)
+print("  17 % 3  =", 17 % 3)
+print("  abs(-42) =", abs(-42))
+
+# ─── Mutable Variables ───
+print("\n▸ Mutable Variables")
+mut counter = 0
+counter += 1
+counter += 1
+counter += 1
+print("  counter:", counter)
+
+# ─── String Operations ───
+print("\n▸ String Operations")
+let stars = "⭐" * 5
+print("  " + stars)
+print("  length:", len("Riz"))
+print("  index:", "Hello"[0])
+
+# ─── Lists ───
+print("\n▸ Lists")
+let numbers = [1, 2, 3, 4, 5]
+print("  numbers:", numbers)
+print("  length:", len(numbers))
+print("  first:", numbers[0])
+print("  last:", numbers[-1])
+print("  sum:", sum(numbers))
+print("  min:", min(numbers))
+print("  max:", max(numbers))
+
+# ─── Functions & Closures ───
+print("\n▸ Functions & Closures")
+
+fn make_counter(start) {
+    mut count = start
+    fn increment() {
+        count += 1
+        return count
+    }
+    return increment
+}
+
+# Short-form functions
+fn square(x) => x * x
+fn cube(x) => x * x * x
+
+print("  square(7) =", square(7))
+print("  cube(3) =", cube(3))
+
+# ─── Higher-Order Functions ───
+print("\n▸ Higher-Order Functions")
+
+fn apply(f, x) {
+    return f(x)
+}
+
+print("  apply(square, 5) =", apply(square, 5))
+
+# ─── Loops ───
+print("\n▸ Loops")
+
+# While loop
+mut sum_val = 0
+mut i = 1
+while i <= 100 {
+    sum_val += i
+    i += 1
+}
+print("  Sum 1..100 =", sum_val)
+
+# For loop with break
+print("  First number > 50 in list:")
+let data = [10, 25, 37, 52, 68, 91]
+for x in data {
+    if x > 50 {
+        print("   ", x)
+        break
+    }
+}
+
+# ─── Pipe Operator ───
+print("\n▸ Pipe Operator")
+let result = [1, 2, 3, 4, 5] |> sum()
+print("  [1,2,3,4,5] |> sum() =", result)
+
+let count = "Hello, Riz!" |> len()
+print("  \"Hello, Riz!\" |> len() =", count)
+
+# ─── Nested Functions ───
+print("\n▸ Nested Functions & Recursion")
+
+fn power(base, exp) {
+    if exp == 0 {
+        return 1
+    }
+    return base * power(base, exp - 1)
+}
+
+print("  2^16 =", power(2, 16))
+print("  3^5  =", power(3, 5))
+
+# ─── Negative Indexing ───
+print("\n▸ Negative Indexing")
+let fruits = ["apple", "banana", "cherry", "date"]
+print("  fruits[-1] =", fruits[-1])
+print("  fruits[-2] =", fruits[-2])
+
+# ─── Done ───
+print("\n═══════════════════════════════════")
+print("   All features working! ✓")
+print("═══════════════════════════════════")
+
+input()

@@ -42,6 +42,10 @@
   #include <windows.h>
   #undef TokenType
   static inline void riz_enable_ansi(void) {
+      #ifdef _WIN32
+      SetConsoleOutputCP(65001);
+      SetConsoleCP(65001);
+      #endif
       HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
       DWORD mode = 0;
       GetConsoleMode(h, &mode);

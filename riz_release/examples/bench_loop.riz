@@ -1,0 +1,9 @@
+mut total = 0
+mut i = 0
+while i < 10000000 {
+    total = total + i
+    i = i + 1
+}
+print(total)
+
+input()

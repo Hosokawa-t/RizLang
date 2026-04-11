@@ -1,0 +1,30 @@
+import_native "plugin_torch.dll"
+
+print("============================================================")
+print("  Riz AOT Native Function Tests")
+print("  Testing modular user-defined fn blocks")
+print("============================================================")
+print("")
+
+fn attention(x, W) {
+    let z = x * W
+    let out = tensor_tanh(z)
+    return out
+}
+
+let N = 2
+let D = 4
+
+# Mock input
+let X = tensor_param(N, D)
+let W1 = tensor_param(D, D)
+let W2 = tensor_param(D, 1)
+
+print("Forward pass executing...")
+let h1 = attention(X, W1)
+let h2 = attention(h1, W2)
+
+print("H2 Output Phase Completed!")
+print("Network fully defined using AOT user-defined functions.")
+
+input()

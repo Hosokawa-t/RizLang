@@ -1,0 +1,197 @@
+# ─── Riz Phase 3 Feature Demo ────────────────
+# Structs, Error Handling, Default Params, and more!
+
+print("═══════════════════════════════════════")
+print("     Riz Phase 3 — Feature Demo")
+print("═══════════════════════════════════════")
+
+# ─── Struct + Impl ───
+print("\n▸ Struct System")
+
+struct Vector { x, y }
+
+impl Vector {
+    fn magnitude(self) => (self.x ** 2 + self.y ** 2) ** 0.5
+
+    fn add(self, other) {
+        return Vector(self.x + other.x, self.y + other.y)
+    }
+
+    fn scale(self, factor) {
+        return Vector(self.x * factor, self.y * factor)
+    }
+
+    fn to_string(self) {
+        return format("Vector({}, {})", self.x, self.y)
+    }
+}
+
+let v1 = Vector(3.0, 4.0)
+let v2 = Vector(1.0, 2.0)
+
+print("  v1:", v1)
+print("  v2:", v2)
+print("  v1.x:", v1.x)
+print("  v1.y:", v1.y)
+print("  v1.magnitude():", v1.magnitude())
+print("  v1.add(v2):", v1.add(v2))
+print("  v1.scale(3):", v1.scale(3))
+print("  v1.to_string():", v1.to_string())
+
+# More complex struct
+struct Color { r, g, b }
+
+impl Color {
+    fn mix(self, other) {
+        return Color(
+            (self.r + other.r) // 2,
+            (self.g + other.g) // 2,
+            (self.b + other.b) // 2
+        )
+    }
+
+    fn brightness(self) => (self.r + self.g + self.b) // 3
+}
+
+let red = Color(255, 0, 0)
+let blue = Color(0, 0, 255)
+let purple = red.mix(blue)
+print("  red:", red)
+print("  blue:", blue)
+print("  purple (mix):", purple)
+print("  purple brightness:", purple.brightness())
+
+# ─── Field Assignment ───
+print("\n▸ Field Assignment")
+let point = Vector(1.0, 2.0)
+print("  before:", point)
+point.x = 10.0
+point.y = 20.0
+print("  after:", point)
+
+# ─── Index Assignment ───
+print("\n▸ Index Assignment")
+mut nums = [10, 20, 30, 40, 50]
+print("  before:", nums)
+nums[0] = 99
+nums[-1] = 88
+print("  after:", nums)
+
+let config = {name: "Riz", version: 3}
+config["stage"] = "Phase 3"
+print("  dict after set:", config)
+
+# ─── try/catch/throw ───
+print("\n▸ Error Handling (try/catch/throw)")
+
+fn safe_divide(a, b) {
+    if b == 0 {
+        throw "Division by zero!"
+    }
+    return a / b
+}
+
+try {
+    let result = safe_divide(10, 3)
+    print("  10 / 3 =", result)
+} catch e {
+    print("  Error:", e)
+}
+
+try {
+    let result = safe_divide(10, 0)
+    print("  This should not print:", result)
+} catch e {
+    print("  Caught:", e)
+}
+
+# Nested try/catch
+try {
+    try {
+        throw "inner error"
+    } catch e {
+        print("  Inner caught:", e)
+        throw "re-thrown: " + e
+    }
+} catch e {
+    print("  Outer caught:", e)
+}
+
+# ─── Default Parameters ───
+print("\n▸ Default Parameters")
+
+fn greet(name, greeting = "Hello") {
+    return format("{}, {}!", greeting, name)
+}
+
+print("  greet('Riz'):", greet("Riz"))
+print("  greet('Riz', 'Hey'):", greet("Riz", "Hey"))
+
+fn make_list(size, fill = 0) {
+    mut result = []
+    for i in range(size) {
+        result.push(fill)
+    }
+    return result
+}
+
+print("  make_list(5):", make_list(5))
+print("  make_list(3, 42):", make_list(3, 42))
+
+fn power(base, exp = 2) => base ** exp
+print("  power(5):", power(5))
+print("  power(2, 10):", power(2, 10))
+
+# ─── 'in' operator ───
+print("\n▸ 'in' Operator")
+
+let fruits = ["apple", "banana", "cherry"]
+print("  'banana' in fruits:", "banana" in fruits)
+print("  'grape' in fruits:", "grape" in fruits)
+
+let data = {name: "Riz", version: 3}
+print("  'name' in data:", "name" in data)
+print("  'age' in data:", "age" in data)
+
+print("  'Riz' in 'Hello Riz!':", "Riz" in "Hello Riz!")
+
+# Combined with if
+if "banana" in fruits {
+    print("  Found banana! ✓")
+}
+
+# ─── Index assignment on dicts ───
+print("\n▸ Dict mutation via index")
+mut scores = {Alice: 90, Bob: 85}
+scores["Charlie"] = 95
+scores["Alice"] = 92
+print("  scores:", scores)
+
+# ─── struct with methods chaining ───
+print("\n▸ Struct Method Chaining")
+
+struct Builder { parts }
+
+impl Builder {
+    fn add(self, part) {
+        self.parts.push(part)
+        return self
+    }
+
+    fn build(self) {
+        return self.parts.join(" -> ")
+    }
+}
+
+let pipeline = Builder([])
+pipeline.add("Parse")
+pipeline.add("Analyze")
+pipeline.add("Optimize")
+pipeline.add("Generate")
+print("  Pipeline:", pipeline.build())
+
+print("\n═══════════════════════════════════════")
+print("   Phase 3 — All features working! ✓")
+print("═══════════════════════════════════════")
+
+input()

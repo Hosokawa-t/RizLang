@@ -1,0 +1,12 @@
+# Let's import libc malloc implicitly from FFI just for testing!
+import_native "plugin_python.dll" # we just need any plugin loaded or we can fake a pointer
+# Let's pretend ptr is a valid C-pointer returned by some native function
+mut ptr: Memory = 0
+
+# The AOT compiler won't crash when emitting `ptr.field = 5` because it assumes Memory is a C-struct name!
+# Actually, wait, `AOTType` uses `let ptr: StructName = p;`
+mut tensor: Tensor = 0
+tensor.size = 100
+tensor.data = 0
+
+input()

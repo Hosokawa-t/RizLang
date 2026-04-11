@@ -531,6 +531,7 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
     emit_fn_bodies(program);
     fprintf(G.out, "int main(void) {\n");
     G.indent = 1;
+    ind(); fprintf(G.out, "riz_enable_ansi();\n");
     ind(); fprintf(G.out, "char src_path[512];\n");
     ind(); fprintf(G.out, "strncpy(src_path, \"");
     for (const char* c = output_path; *c; c++) {

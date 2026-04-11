@@ -1,0 +1,3 @@
+print("Hello from Riz Native!")
+print("This console window will not close until you hit Enter.")
+input()

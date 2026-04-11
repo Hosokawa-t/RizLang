@@ -1,0 +1,37 @@
+# ─── Fibonacci in Riz ─────────────────────────
+# Classic recursive and iterative fibonacci
+
+# Recursive version
+fn fib(n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+# Print first 15 fibonacci numbers
+print("Fibonacci (recursive):")
+for i in range(15) {
+    print("  fib(" + str(i) + ") =", fib(i))
+}
+
+# Iterative version (much faster for large n)
+fn fib_iter(n) {
+    if n <= 1 {
+        return n
+    }
+    mut a = 0
+    mut b = 1
+    for i in range(2, n + 1) {
+        let temp = b
+        b = a + b
+        a = temp
+    }
+    return b
+}
+
+print("\nFibonacci (iterative):")
+print("  fib(30) =", fib_iter(30))
+print("  fib(50) =", fib_iter(50))
+
+input()

@@ -1,0 +1,148 @@
+# ============================================================
+#  Riz Neural Network -- XOR Training Demo
+# ============================================================
+#
+#  Trains a 2-layer MLP to solve the XOR problem.
+#  XOR cannot be solved by a single linear layer, so this
+#  proves the entire neural network pipeline works:
+#    Forward pass -> Loss -> Backward (autograd) -> SGD update
+#
+#  Architecture:
+#    Input (4x2) -> Linear(2->16) + Sigmoid -> Linear(16->1) + Sigmoid -> Output
+#
+#  Build:  gcc -shared -O2 -Isrc -o plugin_tensor.dll examples/plugin_tensor.c -lm
+#  Run:    riz examples/train_xor.riz
+
+import_native "plugin_tensor.dll"
+
+print("============================================================")
+print("  Riz Language -- Neural Network Training")
+print("  Task: Learn XOR function with a 2-layer MLP")
+print("============================================================")
+print("")
+
+# --- Training data: XOR truth table ---
+#   Input: (x1, x2)   Target: x1 XOR x2
+#   (0, 0) -> 0
+#   (0, 1) -> 1
+#   (1, 0) -> 1
+#   (1, 1) -> 0
+
+let X = tensor_zeros(4, 2)
+tensor_set(X, 0, 0, 0.0)
+tensor_set(X, 0, 1, 0.0)
+tensor_set(X, 1, 0, 0.0)
+tensor_set(X, 1, 1, 1.0)
+tensor_set(X, 2, 0, 1.0)
+tensor_set(X, 2, 1, 0.0)
+tensor_set(X, 3, 0, 1.0)
+tensor_set(X, 3, 1, 1.0)
+
+let Y = tensor_zeros(4, 1)
+tensor_set(Y, 0, 0, 0.0)
+tensor_set(Y, 1, 0, 1.0)
+tensor_set(Y, 2, 0, 1.0)
+tensor_set(Y, 3, 0, 0.0)
+
+print("Input X:")
+tensor_print(X)
+print("Target Y (XOR):")
+tensor_print(Y)
+
+# --- Model parameters ---
+# Layer 1: 2 inputs -> 16 hidden neurons
+let W1 = tensor_param(2, 16)
+let b1 = tensor_param(1, 16)
+
+# Layer 2: 16 hidden -> 1 output
+let W2 = tensor_param(16, 1)
+let b2 = tensor_param(1, 1)
+
+print("Model: Input(2) -> Hidden(16, sigmoid) -> Output(1, sigmoid)")
+print("Parameters: W1[2x16] b1[1x16] W2[16x1] b2[1x1]")
+print("Total params:", 2*16 + 16 + 16*1 + 1)
+print("")
+
+# --- Training loop ---
+let lr = 1.0
+let epochs = 3000
+
+print("Training with SGD, lr =", lr, ", epochs =", epochs)
+print("------------------------------------------------------------")
+
+mut epoch = 0
+while epoch < epochs {
+    # === Forward pass ===
+    # hidden = sigmoid(X @ W1 + b1)
+    let z1 = tensor_matmul(X, W1)
+    let z1b = tensor_bias_add(z1, b1)
+    let h = tensor_sigmoid(z1b)
+
+    # output = sigmoid(h @ W2 + b2)
+    let z2 = tensor_matmul(h, W2)
+    let z2b = tensor_bias_add(z2, b2)
+    let out = tensor_sigmoid(z2b)
+
+    # === Loss: MSE = sum((out - Y)^2) / 4 ===
+    let diff = tensor_sub(out, Y)
+    let sq = tensor_mul(diff, diff)
+    let loss = tensor_sum(sq)
+
+    # === Backward ===
+    tensor_backward(loss)
+
+    # === SGD step ===
+    tensor_sgd(W1, lr)
+    tensor_sgd(b1, lr)
+    tensor_sgd(W2, lr)
+    tensor_sgd(b2, lr)
+
+    # === Zero gradients for next iteration ===
+    tensor_zero_grad(W1)
+    tensor_zero_grad(b1)
+    tensor_zero_grad(W2)
+    tensor_zero_grad(b2)
+
+    # === Log ===
+    if epoch % 500 == 0 {
+        let loss_f = tensor_item(loss)
+        print("  Epoch", epoch, "| Loss =", loss_f)
+    }
+
+    epoch = epoch + 1
+}
+
+# --- Final results ---
+print("")
+print("============================================================")
+print("  Training Complete!")
+print("============================================================")
+print("")
+
+# Run final forward pass
+let z1 = tensor_matmul(X, W1)
+let z1b = tensor_bias_add(z1, b1)
+let h = tensor_sigmoid(z1b)
+let z2 = tensor_matmul(h, W2)
+let z2b = tensor_bias_add(z2, b2)
+let pred = tensor_sigmoid(z2b)
+
+print("Predictions (should be close to [0, 1, 1, 0]):")
+tensor_print(pred)
+
+print("Expected:")
+tensor_print(Y)
+
+print("Individual predictions:")
+print("  XOR(0,0) =", tensor_get(pred, 0, 0), " (expected 0)")
+print("  XOR(0,1) =", tensor_get(pred, 1, 0), " (expected 1)")
+print("  XOR(1,0) =", tensor_get(pred, 2, 0), " (expected 1)")
+print("  XOR(1,1) =", tensor_get(pred, 3, 0), " (expected 0)")
+
+# Compute final loss
+let diff = tensor_sub(pred, Y)
+let sq = tensor_mul(diff, diff)
+let final_loss = tensor_sum(sq)
+print("")
+print("Final MSE Loss:", tensor_item(final_loss))
+print("============================================================")

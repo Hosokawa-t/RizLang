@@ -11,6 +11,7 @@
 
 #include "value.h"
 #include "riz_plugin.h"
+#include "common.h"
 #include <math.h>
 
 /* AOT Line Tracking & Diagnostics */
