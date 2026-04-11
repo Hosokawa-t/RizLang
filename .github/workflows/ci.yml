@@ -25,6 +25,9 @@ jobs:
       - name: Smoke — VM
         run: ./riz --vm examples/vm_test.riz
 
+      - name: Parse-check all examples (riz check)
+        run: bash tools/check_examples.sh
+
       - name: Build llama bridge plugin (.so)
         run: gcc -shared -O2 -Wall -Wextra -Isrc -o plugin_llama_cli.so examples/plugin_llama_cli.c
 
@@ -36,6 +39,37 @@ jobs:
         working-directory: lsp
         run: npm ci && npm run build
 
-      - name: Build Riz VS Code extension
+      - name: Package Riz VS Code extension (VSIX)
         working-directory: editors/riz-vscode
-        run: npm ci && npm run compile
+        run: npm ci && npx --yes @vscode/vsce package --no-dependencies
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: riz-vscode-vsix
+          path: editors/riz-vscode/*.vsix
+          if-no-files-found: error
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: Build and smoke-test Riz (MinGW)
+        shell: msys2 {0}
+        run: |
+          set -e
+          gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz.exe \
+            src/diagnostic.c src/main.c src/lexer.c src/parser.c src/ast.c \
+            src/interpreter.c src/value.c src/environment.c \
+            src/chunk.c src/compiler.c src/vm.c src/codegen.c -lm
+          ./riz.exe examples/hello.riz
+          ./riz.exe --vm examples/vm_test.riz
+          bash tools/check_examples.sh

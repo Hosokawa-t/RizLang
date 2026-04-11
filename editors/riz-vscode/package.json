@@ -3,11 +3,16 @@
   "displayName": "Riz",
   "description": "Riz language support (syntax + LSP diagnostics via riz check)",
   "version": "0.1.0",
-  "publisher": "riz",
+  "license": "MIT",
+  "publisher": "thosokawa",
   "repository": {
     "type": "git",
     "url": "https://github.com/Hosokawa-t/riz.git"
   },
+  "bugs": {
+    "url": "https://github.com/Hosokawa-t/riz/issues"
+  },
+  "homepage": "https://github.com/Hosokawa-t/riz#readme",
   "keywords": [
     "riz",
     "language",
@@ -55,7 +60,7 @@
         "riz.lspServerScript": {
           "type": "string",
           "default": "",
-          "description": "Path to lsp/out/server.js. If empty, the extension looks in the workspace (lsp/out/server.js) then bundled/server/out/server.js."
+          "description": "Path to lsp/out/server.js. If empty: workspace lsp/out/server.js, else bundled/lsp (VSIX)."
         },
         "riz.nodePath": {
           "type": "string",
@@ -69,7 +74,7 @@
     "vscode:prepublish": "npm run compile && node ./scripts/bundle-server.cjs",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -96,6 +96,15 @@ riz --aot examples\python_demo.riz
 examples\python_demo.exe
 ```
 
+## Testing
+
+After building `riz` / `riz.exe`, run a parse-only sweep over every file in `examples/`:
+
+- **Linux / macOS / Git Bash:** `bash tools/check_examples.sh`
+- **Windows (PowerShell):** `pwsh tools/check_examples.ps1`
+
+CI runs the same check on Linux and on **Windows (MSYS2 MinGW64)** so the core C toolchain stays green on both platforms.
+
 ## License
 
 MIT License.

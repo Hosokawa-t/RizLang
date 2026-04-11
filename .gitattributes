@@ -1,0 +1,2 @@
+# Shell entrypoints must stay LF for Git Bash / MSYS / CI
+tools/*.sh text eol=lf

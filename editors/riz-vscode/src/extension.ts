@@ -10,6 +10,27 @@ import {
 
 let client: LanguageClient | undefined;
 
+function tryBundled(context: vscode.ExtensionContext): { lspRoot: string; serverJs: string } | undefined {
+  const bundled = path.join(context.extensionPath, "bundled", "lsp", "out", "server.js");
+  if (fs.existsSync(bundled)) {
+    const lspRoot = path.join(context.extensionPath, "bundled", "lsp");
+    return { lspRoot, serverJs: path.join("out", "server.js") };
+  }
+  return undefined;
+}
+
+function tryWorkspace(): { lspRoot: string; serverJs: string } | undefined {
+  const folders = vscode.workspace.workspaceFolders;
+  if (folders?.length) {
+    const candidate = path.join(folders[0].uri.fsPath, "lsp", "out", "server.js");
+    if (fs.existsSync(candidate)) {
+      const lspRoot = path.join(folders[0].uri.fsPath, "lsp");
+      return { lspRoot, serverJs: path.join("out", "server.js") };
+    }
+  }
+  return undefined;
+}
+
 function resolveLspRoot(context: vscode.ExtensionContext): { lspRoot: string; serverJs: string } | undefined {
   const cfg = vscode.workspace.getConfiguration("riz");
   const custom = (cfg.get<string>("lspServerScript") || "").trim();
@@ -20,20 +41,16 @@ function resolveLspRoot(context: vscode.ExtensionContext): { lspRoot: string; se
       return { lspRoot, serverJs: path.join("out", "server.js") };
     }
   }
-  const folders = vscode.workspace.workspaceFolders;
-  if (folders?.length) {
-    const candidate = path.join(folders[0].uri.fsPath, "lsp", "out", "server.js");
-    if (fs.existsSync(candidate)) {
-      const lspRoot = path.join(folders[0].uri.fsPath, "lsp");
-      return { lspRoot, serverJs: path.join("out", "server.js") };
-    }
+  /* F5 / Extension Development: prefer workspace lsp for fast iteration */
+  if (context.extensionMode === vscode.ExtensionMode.Development) {
+    const w = tryWorkspace();
+    if (w) return w;
+    return tryBundled(context);
   }
-  const bundled = path.join(context.extensionPath, "bundled", "lsp", "out", "server.js");
-  if (fs.existsSync(bundled)) {
-    const lspRoot = path.join(context.extensionPath, "bundled", "lsp");
-    return { lspRoot, serverJs: path.join("out", "server.js") };
-  }
-  return undefined;
+  /* Installed VSIX: bundled LSP first */
+  const b = tryBundled(context);
+  if (b) return b;
+  return tryWorkspace();
 }
 
 export function activate(context: vscode.ExtensionContext) {
