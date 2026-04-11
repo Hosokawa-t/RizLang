@@ -39,6 +39,8 @@ static RizPluginAPI G;
 #define OP_SIGMOID   6
 #define OP_SUM       7
 #define OP_BIAS_ADD  8
+#define OP_TANH      9
+#define OP_SCALE_DIV 10
 
 typedef struct Tensor {
     float* data;
@@ -46,8 +48,9 @@ typedef struct Tensor {
     int    rows, cols, size;
     int    op;
     struct Tensor* src[2];
+    float  scalar;          /* used by scale_div */
     int    requires_grad;
-    int    _visited;        /* prevents double-backward */
+    int    _visited;
 } Tensor;
 
 /* ---- Lifecycle ---- */
@@ -227,6 +230,21 @@ static void backward(Tensor* t) {
                 for (int j=0;j<a->cols;j++) b->grad[j]+=t->grad[i*a->cols+j];
         }
         break;
+    case OP_TANH:
+        if (a->requires_grad) {
+            t_ensure_grad(a);
+            for (int i=0;i<a->size;i++) {
+                float th=t->data[i]; a->grad[i]+=t->grad[i]*(1.0f-th*th);
+            }
+        }
+        break;
+    case OP_SCALE_DIV:
+        if (a->requires_grad) {
+            t_ensure_grad(a);
+            float inv=1.0f/t->scalar;
+            for (int i=0;i<a->size;i++) a->grad[i]+=t->grad[i]*inv;
+        }
+        break;
     }
 
     backward(a);
@@ -355,6 +373,47 @@ static RizPluginValue fn_print(RizPluginValue* a,int n){
     printf("]\n");return G.make_none();
 }
 
+/* Data generators (create training data in C for speed) */
+static RizPluginValue fn_make_sine(RizPluginValue* a, int n) {
+    int samples = (int)a[0].as.integer;
+    /* Returns a list: [X_tensor, Y_tensor] */
+    Tensor* X = t_new(samples, 1, 0);
+    Tensor* Y = t_new(samples, 1, 0);
+    for (int i = 0; i < samples; i++) {
+        float x = -3.14159f + 6.28318f * (float)i / (float)(samples - 1);
+        X->data[i] = x;
+        Y->data[i] = sinf(x);
+    }
+    RizPluginValue list = G.make_list();
+    G.list_append(list.as.list, wrap(X));
+    G.list_append(list.as.list, wrap(Y));
+    return list;
+}
+
+/* tanh activation with autograd */
+static Tensor* fwd_tanh(Tensor* a) {
+    Tensor* c = t_new(a->rows, a->cols, a->requires_grad);
+    for (int i = 0; i < c->size; i++) c->data[i] = tanhf(a->data[i]);
+    c->op = 9; /* OP_TANH */
+    c->src[0] = a;
+    return c;
+}
+static RizPluginValue fn_tanh(RizPluginValue* a, int n) {
+    Tensor* A = as_t(a[0]); if (!A) return G.make_none(); return wrap(fwd_tanh(A));
+}
+
+/* scale_div: divide all elements by a scalar (for mean loss) */
+static RizPluginValue fn_scale_div(RizPluginValue* a, int n) {
+    Tensor* A = as_t(a[0]);
+    double d = a[1].type == VAL_FLOAT ? a[1].as.floating : (double)a[1].as.integer;
+    if (!A || d == 0) return G.make_none();
+    Tensor* c = t_new(A->rows, A->cols, A->requires_grad);
+    for (int i = 0; i < c->size; i++) c->data[i] = A->data[i] / (float)d;
+    c->op = 10; /* OP_SCALE_DIV */
+    c->src[0] = A; c->scalar = (float)d; /* store divisor for backward */
+    return wrap(c);
+}
+
 /* ---- Entry point ---- */
 
 RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
@@ -373,6 +432,7 @@ RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
     api->register_fn(api->interp, "tensor_matmul",   fn_matmul,   2);
     api->register_fn(api->interp, "tensor_relu",     fn_relu,     1);
     api->register_fn(api->interp, "tensor_sigmoid",  fn_sigmoid,  1);
+    api->register_fn(api->interp, "tensor_tanh",     fn_tanh,     1);
     api->register_fn(api->interp, "tensor_bias_add", fn_bias_add, 2);
     api->register_fn(api->interp, "tensor_sum",      fn_sum_t,    1);
     api->register_fn(api->interp, "tensor_item",     fn_item,     1);
@@ -381,4 +441,7 @@ RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
     api->register_fn(api->interp, "tensor_sgd",      fn_sgd,      2);
     api->register_fn(api->interp, "tensor_shape",    fn_shape,    1);
     api->register_fn(api->interp, "tensor_print",    fn_print,    1);
+    api->register_fn(api->interp, "tensor_make_sine",fn_make_sine,1);
+    api->register_fn(api->interp, "tensor_scale_div",fn_scale_div,2);
 }
+
