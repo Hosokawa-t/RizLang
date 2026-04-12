@@ -15,7 +15,7 @@ Figures are illustrative; measure on your machine for serious comparisons.
 - **Dual runtime**: interpreter for fast iteration; `riz --vm` for bytecode; `riz --aot` for emitted C + native binary.
 - **Optional type hints** (`: int`, `: float`, …) for documentation and AOT-oriented codegen.
 - **Plugins**: `import_native` / **`import_python`** (default `plugin_python` library name) load `.dll` / `.so` / `.dylib` — Python (`examples/python/`), tensors, LLM bridge, etc.
-- **Diagnostics**: `riz check` (NDJSON for tooling), **LSP** under `lsp/`, VS Code workspace under `editors/riz-vscode`.
+- **Diagnostics**: `riz check` / `riz check --strict` (NDJSON for tooling; strict fails on warnings), **LSP** under `lsp/`, VS Code workspace under `editors/riz-vscode`.
 - **Observable errors**: `debug(x, label?)` (stderr, returns `x`), `panic(msg?)` (message + call stack, `exit(1)`), and **call stack on uncaught `throw`** in the interpreter.
 - **Environment helper**: `riz env doctor` / `setup` / `init` / `shell` — see `riz env --help`.
 
@@ -133,12 +133,14 @@ Python デモのパス例: `examples/python/python_demo.riz`（先に `plugin_py
 
 ## Testing
 
-ビルド後、`examples/**/*.riz` に対して `riz check` を回します。
+After building, `tools/check_examples.*` runs **`riz check --strict`** on every `examples/**/*.riz` (warnings fail the check). For local runs, `riz check file.riz` without `--strict` keeps exit code 0 when only warnings are reported. **`RIZ_CHECK_STRICT=1`** in the environment is equivalent to passing **`--strict`**.
 
 - **Bash**: `bash tools/check_examples.sh`
 - **PowerShell**: `pwsh tools/check_examples.ps1`
 
-CI は Linux と Windows（MSYS2 MinGW64）の両方でビルドとスモークを実行します。
+CI runs these scripts plus interpreter/VM smoke tests on Linux and Windows (MSYS2 MinGW64).
+
+**日本語:** ビルド後、上記スクリプトが `riz check --strict` で全サンプルを検査します。手元では `riz check` のみなら警告は失敗にしません。`RIZ_CHECK_STRICT=1` で `--strict` と同じ扱いになります。
 
 ## Windows x64 配布 zip
 

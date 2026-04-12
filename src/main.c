@@ -18,6 +18,8 @@
 #include "pkg.h"
 #include "riz_import.h"
 #include "riz_env.h"
+#include "static_analysis.h"
+#include <stdlib.h>
 
 /* ═══════════════════════════════════════════════════════
  *  File reading
@@ -47,10 +49,12 @@ static char* read_file(const char* path) {
     return buffer;
 }
 
-/* Parse-only; NDJSON diagnostics on stdout (one object per line) */
-static int run_check(const char* path) {
+/* Parse + static analysis; NDJSON diagnostics on stdout (one object per line).
+ * strict_warnings: treat riz_warn diagnostics as failure (for CI / production gates). */
+static int run_check(const char* path, bool strict_warnings) {
     char* source = read_file(path);
     if (!source) return 1;
+    riz_diag_warning_count = 0;
     riz_machine_diag_mode = true;
     riz_diag_source_path = path;
     Lexer lexer;
@@ -58,11 +62,40 @@ static int run_check(const char* path) {
     Parser parser;
     parser_init(&parser, &lexer);
     ASTNode* program = parser_parse(&parser);
+    int rc = 0;
+    if (parser.had_error) rc = 1;
+    else if (!riz_static_analysis_ok(program)) rc = 1;
+    else if (strict_warnings && riz_diag_warning_count > 0) rc = 1;
     ast_free(program);
     free(source);
     riz_machine_diag_mode = false;
     riz_diag_source_path = NULL;
-    return parser.had_error ? 1 : 0;
+    return rc;
+}
+
+/* argv[0]=riz argv[1]=check argv[2..]= [--strict] <file.riz> */
+static int run_check_cli(int argc, char** argv) {
+    bool strict = false;
+    const char* es = getenv("RIZ_CHECK_STRICT");
+    if (es && es[0] != '\0' && strcmp(es, "0") != 0) strict = true;
+    const char* path = NULL;
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--strict") == 0) strict = true;
+        else if (argv[i][0] == '-') {
+            fprintf(stderr, COL_RED "Unknown option '%s'" COL_RESET " (use: riz check [--strict] <file.riz>)\n", argv[i]);
+            return 1;
+        } else if (path) {
+            fprintf(stderr, COL_RED "Unexpected extra argument '%s'" COL_RESET "\n", argv[i]);
+            return 1;
+        } else {
+            path = argv[i];
+        }
+    }
+    if (!path) {
+        fprintf(stderr, "Usage: riz check [--strict] <file.riz>\n");
+        return 1;
+    }
+    return run_check(path, strict);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -350,7 +383,7 @@ int main(int argc, char* argv[]) {
             printf("  -v, --version    Show version\n");
             printf("  -h, --help       Show this help\n");
             printf("  --vm <file>      Run file via Bytecode VM (experimental)\n");
-            printf("  check <file>     Parse only; print NDJSON diagnostics to stdout\n");
+            printf("  check [--strict] <file>  Parse + static checks; NDJSON on stdout (--strict: warnings fail)\n");
             printf("  pkg <cmd>        Package manager (install --locked, packages.index, …)\n");
             printf("  env <cmd>        Easy environment: doctor, setup, shell (see riz env --help)\n\n");
             printf("If no file is given, starts the interactive REPL.\n");
@@ -361,8 +394,8 @@ int main(int argc, char* argv[]) {
         return run_file(argv[1]);
     }
 
-    if (argc == 3 && strcmp(argv[1], "check") == 0) {
-        return run_check(argv[2]);
+    if (argc >= 3 && strcmp(argv[1], "check") == 0) {
+        return run_check_cli(argc, argv);
     }
 
     if (argc == 3 && strcmp(argv[1], "--vm") == 0) {

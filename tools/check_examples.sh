@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run `riz check` on every examples/**/*.riz (parse + diagnostics only).
+# Run `riz check --strict` on every examples/**/*.riz (parse + static analysis; errors and warnings fail).
 # Usage: from repo root, after building riz:
 #   bash tools/check_examples.sh
 #   bash tools/check_examples.sh ./path/to/riz
@@ -27,7 +27,7 @@ if [[ ${#files[@]} -eq 0 ]]; then
 fi
 for f in "${files[@]}"; do
   echo "check $f"
-  "$RIZ" check "$f"
+  "$RIZ" check --strict "$f"
 done
 
 echo "OK: all example programs parse clean."

@@ -14,6 +14,7 @@ gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz.exe ^
     src/lexer.c ^
     src/parser.c ^
     src/ast.c ^
+    src/static_analysis.c ^
     src/interpreter.c ^
     src/value.c ^
     src/environment.c ^

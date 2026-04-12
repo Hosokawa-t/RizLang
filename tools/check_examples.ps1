@@ -1,4 +1,4 @@
-# Run `riz check` on every examples\*.riz (parse + diagnostics only).
+# Run `riz check --strict` on every examples\*.riz (errors and static warnings fail the check).
 # Usage: from repo root, after building riz.exe:
 #   pwsh tools/check_examples.ps1
 
@@ -17,8 +17,8 @@ if (-not (Test-Path $riz)) {
 Get-ChildItem -Path (Join-Path $Root "examples") -Filter "*.riz" -Recurse -File | Sort-Object FullName | ForEach-Object {
     $rel = $_.FullName.Substring($Root.Length).TrimStart([char[]]@('\', '/'))
     Write-Host "check $rel"
-    & $riz check $_.FullName
+    & $riz check --strict $_.FullName
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-Write-Host "OK: all example programs parse clean."
+Write-Host "OK: all example programs pass riz check."

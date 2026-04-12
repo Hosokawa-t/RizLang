@@ -182,6 +182,7 @@ interface RizDiagJson {
   file?: string;
   startColumn?: number;
   endColumn?: number;
+  severity?: string;
 }
 
 function ndjsonLineToDiagnostic(doc: TextDocument, o: RizDiagJson): Diagnostic {
@@ -203,8 +204,10 @@ function ndjsonLineToDiagnostic(doc: TextDocument, o: RizDiagJson): Diagnostic {
       endChar = Math.min(startChar + 1, lineLen > 0 ? lineLen : startChar + 1);
     }
   }
+  const sev =
+    o.severity === "warning" ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error;
   return {
-    severity: DiagnosticSeverity.Error,
+    severity: sev,
     range: Range.create(line, startChar, line, endChar),
     message: o.message,
     source: o.source || "riz-parse",

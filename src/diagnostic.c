@@ -11,6 +11,8 @@
 
 bool riz_machine_diag_mode = false;
 const char* riz_diag_source_path = NULL;
+const char* riz_diag_source_kind = NULL;
+int riz_diag_warning_count = 0;
 
 static void json_escape_and_print(FILE* out, const char* s) {
     fputc('"', out);
@@ -23,7 +25,8 @@ static void json_escape_and_print(FILE* out, const char* s) {
     fputc('"', out);
 }
 
-static void emit_diag_line(int line, int col0, int col1_exc, const char* buf) {
+static void emit_diag_line(int line, int col0, int col1_exc, bool is_warning, const char* buf) {
+    if (is_warning) riz_diag_warning_count++;
     if (riz_machine_diag_mode) {
         FILE* out = stdout;
         fprintf(out, "{\"line\":%d", line);
@@ -35,19 +38,29 @@ static void emit_diag_line(int line, int col0, int col1_exc, const char* buf) {
         }
         fprintf(out, ",\"message\":");
         json_escape_and_print(out, buf);
-        fprintf(out, ",\"source\":\"riz-parse\"");
+        fprintf(out, ",\"source\":");
+        json_escape_and_print(out, riz_diag_source_kind && riz_diag_source_kind[0]
+            ? riz_diag_source_kind : "riz-parse");
         if (riz_diag_source_path && riz_diag_source_path[0]) {
             fprintf(out, ",\"file\":");
             json_escape_and_print(out, riz_diag_source_path);
         }
+        if (is_warning)
+            fprintf(out, ",\"severity\":\"warning\"");
         fprintf(out, "}\n");
         fflush(out);
         return;
     }
 
-    fprintf(stderr, COL_RED COL_BOLD "Error" COL_RESET
-            COL_RED " [line %d]: " COL_RESET COL_RED "%s" COL_RESET "\n",
-            line, buf);
+    if (is_warning) {
+        fprintf(stderr, COL_YELLOW COL_BOLD "Warning" COL_RESET
+                COL_YELLOW " [line %d]: " COL_RESET COL_YELLOW "%s" COL_RESET "\n",
+                line, buf);
+    } else {
+        fprintf(stderr, COL_RED COL_BOLD "Error" COL_RESET
+                COL_RED " [line %d]: " COL_RESET COL_RED "%s" COL_RESET "\n",
+                line, buf);
+    }
 }
 
 void riz_error(int line, const char* fmt, ...) {
@@ -57,7 +70,7 @@ void riz_error(int line, const char* fmt, ...) {
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
     buf[sizeof(buf) - 1] = '\0';
-    emit_diag_line(line, -1, -1, buf);
+    emit_diag_line(line, -1, -1, false, buf);
 }
 
 void riz_error_col(int line, int start_column, int end_column_exclusive, const char* fmt, ...) {
@@ -67,5 +80,25 @@ void riz_error_col(int line, int start_column, int end_column_exclusive, const c
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
     buf[sizeof(buf) - 1] = '\0';
-    emit_diag_line(line, start_column, end_column_exclusive, buf);
+    emit_diag_line(line, start_column, end_column_exclusive, false, buf);
+}
+
+void riz_warn(int line, const char* fmt, ...) {
+    char buf[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    buf[sizeof(buf) - 1] = '\0';
+    emit_diag_line(line, -1, -1, true, buf);
+}
+
+void riz_warn_col(int line, int start_column, int end_column_exclusive, const char* fmt, ...) {
+    char buf[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    buf[sizeof(buf) - 1] = '\0';
+    emit_diag_line(line, start_column, end_column_exclusive, true, buf);
 }

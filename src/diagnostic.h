@@ -13,7 +13,17 @@ extern bool riz_machine_diag_mode;
 /* Current source path for machine diagnostics (UTF-8); may be NULL. */
 extern const char* riz_diag_source_path;
 
+/* JSON "source" field; NULL means "riz-parse" (parse errors). */
+extern const char* riz_diag_source_kind;
+
+/* Incremented on each riz_warn* (reset by host e.g. `riz check`). */
+extern int riz_diag_warning_count;
+
 /* Column-aware parse errors (see common.h for riz_error). */
 void riz_error_col(int line, int start_column, int end_column_exclusive, const char* fmt, ...);
+
+/* Non-fatal diagnostics (machine mode: NDJSON with severity "warning"). */
+void riz_warn(int line, const char* fmt, ...);
+void riz_warn_col(int line, int start_column, int end_column_exclusive, const char* fmt, ...);
 
 #endif
