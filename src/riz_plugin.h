@@ -12,6 +12,7 @@
  *
  * Use in Riz:
  *   import_native "myplugin.dll"
+ *   import_python            (optional path; defaults to plugin_python.{dll,so,dylib})
  */
 
 #ifndef RIZ_PLUGIN_H
@@ -45,6 +46,13 @@ typedef struct {
      * fn:    function pointer matching RizPluginFn
      * arity: expected argument count (-1 for variadic) */
     void (*register_fn)(void* interp, const char* name, RizPluginFn fn, int arity);
+
+    /* Empty dict (ref-counted). Use dict_set_fn + define_global for namespaces like `py`. */
+    RizPluginValue (*make_dict)(void);
+    /* Store a native under key in dict (e.g. key "exec", riz_name "py.exec" for errors). */
+    void (*dict_set_fn)(RizPluginValue dict, const char* key, const char* riz_name, RizPluginFn fn, int arity);
+    /* Bind an arbitrary value into global scope (e.g. the `py` dict). */
+    void (*define_global)(void* interp, const char* name, RizPluginValue value);
 
     /* Convenience constructors for returning values to Riz: */
     RizPluginValue (*make_int)(int64_t v);

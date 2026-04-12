@@ -206,8 +206,16 @@ static ASTNode* parse_call(Parser* P) {
         } else if (match(P, TOK_LBRACKET)) {
             ASTNode*idx=parse_expression(P); consume(P,TOK_RBRACKET,"Expected ']'"); expr=ast_index(expr,idx,line);
         } else if (match(P, TOK_DOT)) {
-            Token n=consume(P,TOK_IDENTIFIER,"Expected member name");
-            char*m=token_text(n); expr=ast_member(expr,m,line); free(m);
+            char* m;
+            if (check(P, TOK_IMPORT)) {
+                advance_parser(P);
+                m = riz_strdup("import");
+            } else {
+                Token n = consume(P, TOK_IDENTIFIER, "Expected member name");
+                m = token_text(n);
+            }
+            expr = ast_member(expr, m, line);
+            free(m);
         } else break;
     }
     return expr;
@@ -533,6 +541,28 @@ static ASTNode* parse_import(Parser* P) {
     ASTNode*n=ast_import(path,line); free(path); return n;
 }
 
+/* import_python [path] — same as import_native; default path is platform plugin name */
+static ASTNode* parse_import_python(Parser* P) {
+    int line = P->current.line;
+    advance_parser(P);
+    char* path;
+    if (check(P, TOK_STRING)) {
+        Token path_tok = consume(P, TOK_STRING, "Expected string path after 'import_python'");
+        path = parse_string_literal(path_tok);
+    } else {
+#ifdef _WIN32
+        path = riz_strdup("plugin_python.dll");
+#elif defined(__APPLE__)
+        path = riz_strdup("plugin_python.dylib");
+#else
+        path = riz_strdup("plugin_python.so");
+#endif
+    }
+    ASTNode* n = ast_import_native(path, line);
+    free(path);
+    return n;
+}
+
 static ASTNode* parse_import_native(Parser* P) {
     int line=P->current.line; advance_parser(P); /* consume import_native */
     Token path_tok=consume(P,TOK_STRING,"Expected library path after 'import_native'");
@@ -544,6 +574,7 @@ static ASTNode* parse_declaration(Parser* P) {
     if (check(P,TOK_LET))           return parse_let_decl(P, false);
     if (check(P,TOK_MUT))           return parse_let_decl(P, true);
     if (check(P,TOK_FN))            return parse_fn_decl(P);
+    if (check(P,TOK_IMPORT_PYTHON)) return parse_import_python(P);
     if (check(P,TOK_IMPORT_NATIVE)) return parse_import_native(P);
     if (check(P,TOK_IMPORT))        return parse_import(P);
     if (check(P,TOK_STRUCT))        return parse_struct_decl(P);

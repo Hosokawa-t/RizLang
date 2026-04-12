@@ -47,6 +47,8 @@ gcc -shared -O2 -Isrc -o plugin_python.dll examples/python/plugin_python.c
 riz examples/python/starter.riz
 ```
 
+Use **`import_python`** for the default plugin name (`plugin_python.dll` / `.so` / `.dylib`), or **`import_native "path"`**. After loading, prefer **`py.exec` / `py.import` / …** (the legacy **`py_*`** globals still work).
+
 **Tensor plugin (CPU)**
 
 ```bash

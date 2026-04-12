@@ -14,7 +14,7 @@ Figures are illustrative; measure on your machine for serious comparisons.
 
 - **Dual runtime**: interpreter for fast iteration; `riz --vm` for bytecode; `riz --aot` for emitted C + native binary.
 - **Optional type hints** (`: int`, `: float`, …) for documentation and AOT-oriented codegen.
-- **Plugins**: `import_native` loads `.dll` / `.so` — Python (`examples/python/`), tensors (`examples/tensor/`), LLM bridge (`examples/llm/`), etc.
+- **Plugins**: `import_native` / **`import_python`** (default `plugin_python` library name) load `.dll` / `.so` / `.dylib` — Python (`examples/python/`), tensors, LLM bridge, etc.
 - **Diagnostics**: `riz check` (NDJSON for tooling), **LSP** under `lsp/`, VS Code workspace under `editors/riz-vscode`.
 - **Observable errors**: `debug(x, label?)` (stderr, returns `x`), `panic(msg?)` (message + call stack, `exit(1)`), and **call stack on uncaught `throw`** in the interpreter.
 - **Environment helper**: `riz env doctor` / `setup` / `init` / `shell` — see `riz env --help`.
@@ -30,7 +30,7 @@ Figures are illustrative; measure on your machine for serious comparisons.
 | Math | `abs`, `min`, `max`, `sum`, `clamp`, `sign`, `floor`, `ceil`, `round` |
 | Logic | `all`, `any` |
 | Control | `assert`, `debug`, `panic`, `exit` |
-| Python bridge | `py_import`, `py_call`, … (with `plugin_python`; see `examples/python/`) |
+| Python bridge | **`py.exec` / `py.import` / …** (global `py` dict) and legacy `py_exec`, `py_import`, … after loading the plugin |
 
 Full quick reference in the REPL: type `help`.
 
@@ -67,17 +67,23 @@ Windows (MinGW-built `riz.exe`): same paths with `.\riz.exe`.
 
 ## Python interoperability
 
-With the Python plugin built (see `examples/python/` and `build_python.bat`):
+Build `plugin_python` (see `examples/python/` and `build_python.bat`). Then either load by platform default or pass an explicit path:
 
 ```riz
-import_native "plugin_python.dll"
+import_python
+# or: import_python "my_plugin_python.dll"
+# or: import_native "plugin_python.dll"
 
-py_exec("import math")
-let py_math = py_import("math")
-let pow_fn = py_getattr(py_math, "pow")
-let res = py_call(pow_fn, 2, 10)
+py.exec("import math")
+let py_math = py.import("math")
+let pow_fn = py.getattr(py_math, "pow")
+let res = py.call(pow_fn, 2, 10)
 print(res)
 ```
+
+The `py_*` globals remain for backward compatibility.
+
+**Plugin authors:** `riz_plugin.h` gained optional `make_dict`, `dict_set_fn`, and `define_global`. Rebuild any native `.dll` / `.so` against the current header; older plugins that only use `register_fn` still work when the host zero-initializes the API struct.
 
 ## Native plugins and operator hooks
 
@@ -91,7 +97,7 @@ Runtime and plugin code can surface **file + line** context (see `aot_panic` / `
 
 # Riz 日本語ドキュメント
 
-Riz は **C11 ランタイム**を核にしたスクリプト言語で、**インタプリタ**・**VM（実験的）**・**AOT（C 生成）**の切り替えができます。Python 資産やネイティブ DLL を **`import_native`** でつなぎ、AI 周辺の「小さな実行ファイル」と「対話的な記述」の両方を狙えます。
+Riz は **C11 ランタイム**を核にしたスクリプト言語で、**インタプリタ**・**VM（実験的）**・**AOT（C 生成）**の切り替えができます。Python ブリッジは **`import_python`**（省略時は OS 既定のプラグイン名）または **`import_native "path"`** で読み込み、スクリプトからは **`py.exec` / `py.import`** などの名前空間（従来の `py_*` も利用可）で呼び出せます。
 
 ## 主な機能
 
@@ -114,7 +120,9 @@ riz --vm examples/vm/vm_test.riz
 riz --aot examples/aot/aot_test.riz
 ```
 
-Python デモのパス例: `examples/python/python_demo.riz`（プラグイン DLL をビルドしたうえで）。
+Python デモのパス例: `examples/python/python_demo.riz`（先に `plugin_python` をビルド）。`import_python` と `py.exec` / `py.import` の使い方は英語セクション **Python interoperability** のコードブロックと同じです。
+
+**ネイティブプラグイン:** `riz_plugin.h` を更新したため、独自プラグインは現行ヘッダで再コンパイルしてください（`register_fn` のみの DLL はそのまま利用可能な場合が多いです）。
 
 ## 推奨開発環境
 

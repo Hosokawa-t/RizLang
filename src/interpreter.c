@@ -611,6 +611,20 @@ static RizValue dict_method(Interpreter* I, RizValue obj, const char* method, Ri
         for(int i=0;i<other->count;i++) riz_dict_set(d,other->keys[i],riz_value_copy(other->values[i]));
         return riz_none();
     }
+    /* Namespace dicts: callable values under string keys (e.g. py.exec on global `py`) */
+    if (riz_dict_has(d, method)) {
+        RizValue slot = riz_dict_get(d, method);
+        if (slot.type == VAL_NATIVE_FN) {
+            NativeFnObj* n = slot.as.native;
+            if (n->arity >= 0 && argc != n->arity) {
+                riz_runtime_error("%s() takes %d arg(s), %d given", n->name, n->arity, argc);
+                return riz_none();
+            }
+            return n->fn(args, argc);
+        }
+        if (slot.type == VAL_FUNCTION)
+            return call_function(I, slot.as.function, args, argc);
+    }
     riz_runtime_error("dict has no method '%s'", method);
     return riz_none();
 }
@@ -694,6 +708,25 @@ static void ffi_register_fn_vm(void* interp_ptr, const char* name, RizPluginFn f
     env_define(vm->globals, name, riz_native(name, (NativeFnPtr)fn, arity), false);
 }
 
+static RizPluginValue ffi_make_dict(void) {
+    return riz_dict_new();
+}
+
+static void ffi_dict_set_fn(RizPluginValue dict, const char* key, const char* riz_name, RizPluginFn fn, int arity) {
+    if (dict.type != VAL_DICT) return;
+    riz_dict_set(dict.as.dict, key, riz_native(riz_name, (NativeFnPtr)fn, arity));
+}
+
+static void ffi_define_global(void* interp_ptr, const char* name, RizPluginValue value) {
+    Interpreter* I = (Interpreter*)interp_ptr;
+    env_define(I->globals, name, value, false);
+}
+
+static void ffi_define_global_vm(void* interp_ptr, const char* name, RizPluginValue value) {
+    RizVM* vm = (RizVM*)interp_ptr;
+    env_define(vm->globals, name, value, false);
+}
+
 static RizPluginValue ffi_make_int(int64_t v)      { return riz_int(v); }
 static RizPluginValue ffi_make_float(double v)     { return riz_float(v); }
 static RizPluginValue ffi_make_bool(bool v)        { return riz_bool(v); }
@@ -768,7 +801,7 @@ bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path) {
         return false;
     }
 #endif
-    RizPluginAPI api;
+    RizPluginAPI api = {0};
     api.register_fn = ffi_register_fn_vm;
     api.make_int = ffi_make_int;
     api.make_float = ffi_make_float;
@@ -784,6 +817,9 @@ bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path) {
     api.interp = vm;
     api.get_current_line = ffi_get_current_line_vm;
     api.panic = ffi_panic_vm;
+    api.make_dict = ffi_make_dict;
+    api.dict_set_fn = ffi_dict_set_fn;
+    api.define_global = ffi_define_global_vm;
     (void)env;
     init_fn(&api);
 
@@ -831,7 +867,7 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     }
 #endif
     /* Build the API bridge and call the plugin's init */
-    RizPluginAPI api;
+    RizPluginAPI api = {0};
     api.register_fn  = ffi_register_fn;
     api.make_int        = ffi_make_int;
     api.make_float      = ffi_make_float;
@@ -847,6 +883,9 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     api.interp          = I;
     api.get_current_line = ffi_get_current_line;
     api.panic           = ffi_panic;
+    api.make_dict       = ffi_make_dict;
+    api.dict_set_fn     = ffi_dict_set_fn;
+    api.define_global   = ffi_define_global;
     init_fn(&api);
 
     /* Track the handle so we can free it later */

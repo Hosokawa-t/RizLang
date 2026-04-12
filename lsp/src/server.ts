@@ -67,6 +67,7 @@ const KEYWORDS = [
   "await",
   "import",
   "import_native",
+  "import_python",
   "break",
   "continue",
   "try",
@@ -116,6 +117,7 @@ const BUILTIN_HELP: Record<string, string> = {
   ord: "`ord(s)` — code unit of single-char string.",
   chr: "`chr(n)` — one-char string for n in 0..255.",
   extend: "`extend(list, other)` — append all items from other.",
+  py: "After `import_python` / `import_native` plugin: `py.exec`, `py.eval`, `py.import`, `py.getattr`, `py.call` (same as `py_*` globals).",
 };
 
 const BUILTIN_SIGNATURES: Record<string, { label: string; doc?: string; params?: ParameterInformation[] }> = {

@@ -129,8 +129,9 @@ static const Keyword keywords[] = {
     { "trait",    5,  TOK_TRAIT },
     { "async",    5,  TOK_ASYNC },
     { "await",    5,  TOK_AWAIT },
+    { "import_python", 13, TOK_IMPORT_PYTHON },
+    { "import_native", 13, TOK_IMPORT_NATIVE },
     { "import",        6,  TOK_IMPORT },
-    { "import_native", 13,  TOK_IMPORT_NATIVE },
     { "break",          5,  TOK_BREAK },
     { "continue", 8,  TOK_CONTINUE },
     { "try",      3,  TOK_TRY },
@@ -348,6 +349,7 @@ const char* token_type_name(TokenType type) {
         case TOK_TRAIT:         return "trait";
         case TOK_ASYNC:         return "async";
         case TOK_AWAIT:         return "await";
+        case TOK_IMPORT_PYTHON: return "import_python";
         case TOK_IMPORT:        return "import";
         case TOK_IMPORT_NATIVE: return "import_native";
         case TOK_BREAK:         return "break";

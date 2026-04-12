@@ -204,5 +204,15 @@ RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
     api->register_fn(api->interp, "py_eval",    fn_py_eval,     1);
     api->register_fn(api->interp, "py_import",  fn_py_import,   1);
     api->register_fn(api->interp, "py_getattr", fn_py_getattr,  2);
-    api->register_fn(api->interp, "py_call",    fn_py_call,    -1); /* Supports arity 1 or 2 */
+    api->register_fn(api->interp, "py_call",    fn_py_call,    -1);
+
+    if (api->make_dict && api->dict_set_fn && api->define_global) {
+        RizPluginValue pyd = api->make_dict();
+        api->dict_set_fn(pyd, "exec",    "py.exec",    fn_py_exec,     1);
+        api->dict_set_fn(pyd, "eval",    "py.eval",    fn_py_eval,     1);
+        api->dict_set_fn(pyd, "import",  "py.import",  fn_py_import,   1);
+        api->dict_set_fn(pyd, "getattr", "py.getattr", fn_py_getattr,  2);
+        api->dict_set_fn(pyd, "call",    "py.call",    fn_py_call,    -1);
+        api->define_global(api->interp, "py", pyd);
+    }
 }

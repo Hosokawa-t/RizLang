@@ -119,7 +119,7 @@ void aot_load_plugin(const char* lib_path) {
         exit(1);
     }
 
-    RizPluginAPI api;
+    RizPluginAPI api = {0};
     api.register_fn = aot_register_fn;
     api.make_int = _mk_int;
     api.make_float = _mk_float;

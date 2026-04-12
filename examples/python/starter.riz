@@ -1,6 +1,6 @@
 # 1) Build plugin (adjust -lpython3.x for your install), from repo root:
 #    gcc -shared -O2 -Isrc -o plugin_python.dll examples/python/plugin_python.c $(python3-config --ldflags --libs)
-# 2) Run from repo root (DLL in cwd):
+# 2) Run from repo root (DLL/SO in cwd):
 #    riz examples/python/starter.riz
-import_native "plugin_python.dll"
-py_exec("print('Hello from embedded Python')")
+import_python
+py.exec("print('Hello from embedded Python')")

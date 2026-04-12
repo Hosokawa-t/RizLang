@@ -1,30 +1,30 @@
-import_native "plugin_python.dll"
+# CPython bridge: default library name per OS, or import_native "path".
+import_python
 
 print("============================================================")
-print("  Riz AOT Python Embedded Bridge Test")
+print("  Riz Python bridge (py.* namespace + legacy py_* globals)")
 print("============================================================")
 
-print("[1] Executing arbitrary Python Code...")
-py_exec("import math")
-py_exec("print('Hello from the CPython core! pi is', math.pi)")
+print("[1] py.exec — arbitrary Python")
+py.exec("import math")
+py.exec("print('Hello from CPython! pi is', math.pi)")
 
 print("")
-print("[2] Importing Python Module natively into Riz variable...")
-let py_math = py_import("math")
+print("[2] py.import — module as Riz value")
+let py_math = py.import("math")
 print(py_math)
 
 print("")
-print("[3] Evaluating Python Expression with Marshalling...")
-let res = py_eval("math.sqrt(100.0) + 5.0")
-print("Result of math.sqrt(100.0) + 5.0 is:")
+print("[3] py.eval — expression result")
+let res = py.eval("math.sqrt(100.0) + 5.0")
+print("math.sqrt(100.0) + 5.0 =>")
 print(res)
 
 print("")
-print("[4] Executing Python getattr and call directly...")
-let pow_fn = py_getattr(py_math, "pow")
-# Let's calculate 2^10 = 1024
-let pow_res = py_call(pow_fn, 2, 10)
-print("Result of math.pow(2, 10) called via FFI:")
+print("[4] py.getattr + py.call")
+let pow_fn = py.getattr(py_math, "pow")
+let pow_res = py.call(pow_fn, 2, 10)
+print("math.pow(2, 10) =>")
 print(pow_res)
 
 print("")
