@@ -134,6 +134,20 @@ After building `riz` / `riz.exe`, run a parse-only sweep over every file in `exa
 
 CI runs the same check on Linux and on **Windows (MSYS2 MinGW64)** so the core C toolchain stays green on both platforms.
 
+## Windows x64 bundle (zip) / Windows 配布用 zip
+
+Pack **riz.exe** with **AOT `src/`**, **examples** (`.riz` / docs only; large models and build artifacts are excluded), **LSP** (`lsp/out` + pruned `node_modules`), and **README-WINDOWS.md**:
+
+```powershell
+pwsh tools/package_windows_release.ps1
+```
+
+Output: `riz-v{VERSION}-windows-x64.zip` beside `riz.exe` (version from `src/common.h`). If **`vendor\tcc\tcc.exe`** exists in the repo, it is included for AOT without gcc.
+
+**CI:** the Windows job uploads this zip as artifact **`riz-windows-x64-zip`**. Attach to a GitHub release, e.g. `gh release upload v0.9.3 riz-v0.9.3-windows-x64.zip --clobber`.
+
+同じ内容を **GitHub Actions の Windows ジョブ**が成果物 **`riz-windows-x64-zip`** として保存します。リリースに載せる例は上記 `gh release upload` です。
+
 ## License
 
 MIT License.
