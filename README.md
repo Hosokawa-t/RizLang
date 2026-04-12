@@ -15,7 +15,7 @@ Figures are illustrative; measure on your machine for serious comparisons.
 - **Dual runtime**: interpreter for fast iteration; `riz --vm` for bytecode; `riz --aot` for emitted C + native binary.
 - **Optional type hints** (`: int`, `: float`, …) for documentation and AOT-oriented codegen.
 - **Plugins**: `import_native` / **`import_python`** (default `plugin_python` library name) load `.dll` / `.so` / `.dylib` — Python (`examples/python/`), tensors, LLM bridge, etc.
-- **Diagnostics**: `riz check` / `riz check --strict` (NDJSON for tooling; strict fails on warnings), **LSP** under `lsp/`, VS Code workspace under `editors/riz-vscode`.
+- **Diagnostics**: `riz check` / `riz check --strict` (NDJSON; strict fails on warnings) with **lexical scope and undefined-name checks**, **`import "…"` export collection**, and **plugin-aware heuristics** after `import_native`; **LSP** under `lsp/`, VS Code workspace under `editors/riz-vscode`.
 - **Observable errors**: `debug(x, label?)` (stderr, returns `x`), `panic(msg?)` (message + call stack, `exit(1)`), and **call stack on uncaught `throw`** in the interpreter.
 - **Environment helper**: `riz env doctor` / `setup` / `init` / `shell` — see `riz env --help`.
 

@@ -54,6 +54,7 @@ static char* read_file(const char* path) {
 static int run_check(const char* path, bool strict_warnings) {
     char* source = read_file(path);
     if (!source) return 1;
+    riz_import_configure(path);
     riz_diag_warning_count = 0;
     riz_machine_diag_mode = true;
     riz_diag_source_path = path;
