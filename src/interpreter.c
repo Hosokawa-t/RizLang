@@ -9,6 +9,7 @@
  *   - import "file.riz" support
  *   - New builtins: format, sorted, reversed, enumerate, zip, keys, values, assert, exit
  *   - More builtins: clamp, sign, floor, ceil, round, all, any, bool, ord, chr, extend
+ *   - debug / panic builtins; call stack on uncaught throw
  */
 
 #include "interpreter.h"
@@ -17,12 +18,16 @@
 #include "riz_import.h"
 #include "riz_plugin.h"
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* ═══ Forward declarations ═══ */
 
 static RizValue eval(Interpreter* I, ASTNode* node);
 static void exec_block(Interpreter* I, ASTNode* block);
 static RizValue call_function(Interpreter* I, RizFunction* fn, RizValue* args, int argc);
+static void interpreter_clear_error_stack(Interpreter* I);
+static void interpreter_snapshot_error_stack(Interpreter* I);
 static Interpreter* g_interp = NULL;
 
 /* Forward: struct method helper */
@@ -232,6 +237,36 @@ static RizValue native_assert(RizValue* args, int argc) {
         else
             riz_runtime_error("Assertion failed");
     }
+    return riz_none();
+}
+
+/* Observable debugging (stderr); returns first argument unchanged. Optional label via second arg. */
+RizValue native_debug(RizValue* args, int argc) {
+    if (argc < 1) { riz_runtime_error("debug() requires at least 1 argument"); return riz_none(); }
+    int line = (g_interp && g_interp->current_line > 0) ? g_interp->current_line : 0;
+    fprintf(stderr, COL_DIM "[debug line %d]" COL_RESET " ", line);
+    if (argc >= 2) {
+        char* lab = riz_value_to_string(args[1]);
+        fprintf(stderr, "%s: ", lab);
+        free(lab);
+    }
+    char* s = riz_value_to_string(args[0]);
+    fprintf(stderr, "%s\n", s);
+    free(s);
+    return riz_value_copy(args[0]);
+}
+
+/* Fatal error with optional message (any value); prints call stack then exit(1). */
+RizValue native_panic(RizValue* args, int argc) {
+    char* msg = argc >= 1 ? riz_value_to_string(args[0]) : riz_strdup("panic");
+    fprintf(stderr, COL_RED COL_BOLD "panic:" COL_RESET " %s\n", msg);
+    free(msg);
+    if (g_interp && g_interp->call_stack_len > 0) {
+        fprintf(stderr, COL_DIM "Call stack (innermost last):\n" COL_RESET);
+        for (int i = 0; i < g_interp->call_stack_len; i++)
+            fprintf(stderr, COL_DIM "  at %s\n" COL_RESET, g_interp->call_stack[i]);
+    }
+    exit(1);
     return riz_none();
 }
 
@@ -862,6 +897,8 @@ void riz_vm_seed_builtins(Environment* g) {
     env_define(g, "ord",      riz_native("ord",      native_ord,         1), false);
     env_define(g, "chr",      riz_native("chr",      native_chr,         1), false);
     env_define(g, "extend",   riz_native("extend",   native_extend,      2), false);
+    env_define(g, "debug",    riz_native("debug",    native_debug,      -1), false);
+    env_define(g, "panic",    riz_native("panic",    native_panic,      -1), false);
 }
 
 static void register_builtins(Interpreter* I) {
@@ -889,6 +926,12 @@ Interpreter* interpreter_new(void) {
 
 void interpreter_free(Interpreter* interp) {
     if (!interp) return;
+    interpreter_clear_error_stack(interp);
+    for (int i = 0; i < interp->call_stack_len; i++) free(interp->call_stack[i]);
+    free(interp->call_stack);
+    interp->call_stack = NULL;
+    interp->call_stack_len = 0;
+    interp->call_stack_cap = 0;
     for (int i = 0; i < interp->import_count; i++) free(interp->imported_files[i]);
     free(interp->imported_files);
     env_free_deep(interp->globals);
@@ -913,6 +956,39 @@ void interpreter_free(Interpreter* interp) {
  *  Call a function value
  * ═══════════════════════════════════════════════════════ */
 
+static void call_stack_push(Interpreter* I, const char* name) {
+    if (I->call_stack_len >= I->call_stack_cap) {
+        int n = I->call_stack_cap ? I->call_stack_cap * 2 : 8;
+        I->call_stack = (char**)realloc(I->call_stack, sizeof(char*) * (size_t)n);
+        I->call_stack_cap = n;
+    }
+    I->call_stack[I->call_stack_len++] = riz_strdup(name ? name : "fn");
+}
+
+static void call_stack_pop(Interpreter* I) {
+    if (I->call_stack_len <= 0) return;
+    I->call_stack_len--;
+    free(I->call_stack[I->call_stack_len]);
+    I->call_stack[I->call_stack_len] = NULL;
+}
+
+static void interpreter_clear_error_stack(Interpreter* I) {
+    if (!I) return;
+    for (int i = 0; i < I->error_stack_len; i++) free(I->error_stack[i]);
+    free(I->error_stack);
+    I->error_stack = NULL;
+    I->error_stack_len = 0;
+}
+
+static void interpreter_snapshot_error_stack(Interpreter* I) {
+    interpreter_clear_error_stack(I);
+    if (I->call_stack_len <= 0) return;
+    I->error_stack_len = I->call_stack_len;
+    I->error_stack = (char**)malloc(sizeof(char*) * (size_t)I->error_stack_len);
+    for (int i = 0; i < I->error_stack_len; i++)
+        I->error_stack[i] = riz_strdup(I->call_stack[i]);
+}
+
 static RizValue call_function(Interpreter* I, RizFunction* fn, RizValue* args, int argc) {
     /* Handle default parameters */
     int required = fn->param_defaults ? fn->required_count : fn->param_count;
@@ -933,9 +1009,11 @@ static RizValue call_function(Interpreter* I, RizFunction* fn, RizValue* args, i
         }
     }
     Environment* saved = I->current_env; I->current_env = call_env;
+    call_stack_push(I, fn->name);
     exec_block(I, fn->body);
     RizValue result = riz_none();
     if (I->signal == SIG_RETURN) { result = I->signal_value; I->signal = SIG_NONE; }
+    call_stack_pop(I);
     I->current_env = saved;
     return result;
 }
@@ -1562,6 +1640,7 @@ static RizValue eval(Interpreter* I, ASTNode* node) {
             if (I->signal == SIG_THROW) {
                 I->signal = SIG_NONE;
                 RizValue error_val = I->signal_value;
+                interpreter_clear_error_stack(I);
                 Environment* catch_env = env_new(I->current_env);
                 env_define(catch_env, node->as.try_stmt.catch_var, error_val, false);
                 Environment* saved = I->current_env;
@@ -1575,6 +1654,7 @@ static RizValue eval(Interpreter* I, ASTNode* node) {
         /* Phase 3: throw */
         case NODE_THROW_STMT: {
             RizValue val = eval(I, node->as.throw_stmt.value);
+            interpreter_snapshot_error_stack(I);
             I->signal = SIG_THROW;
             I->signal_value = val;
             return riz_none();
@@ -1650,3 +1730,19 @@ static void exec_block(Interpreter* I, ASTNode* block) {
 
 void interpreter_exec(Interpreter* interp, ASTNode* program) { g_interp=interp; eval(interp,program); }
 RizValue interpreter_eval(Interpreter* interp, ASTNode* node) { g_interp=interp; return eval(interp,node); }
+
+void interpreter_report_pending_signal(Interpreter* interp) {
+    if (!interp || interp->signal != SIG_THROW) return;
+    fprintf(stderr, COL_RED COL_BOLD "Uncaught exception:" COL_RESET " ");
+    char* s = riz_value_to_string(interp->signal_value);
+    fprintf(stderr, "%s\n", s);
+    free(s);
+    if (interp->error_stack_len > 0) {
+        fprintf(stderr, COL_DIM "Call stack (innermost last):\n" COL_RESET);
+        for (int i = 0; i < interp->error_stack_len; i++)
+            fprintf(stderr, COL_DIM "  at %s\n" COL_RESET, interp->error_stack[i]);
+    }
+    interpreter_clear_error_stack(interp);
+    interp->had_error = true;
+    interp->signal = SIG_NONE;
+}

@@ -35,6 +35,13 @@ typedef struct {
     int          lib_count;
     /* File runs: root AST; freed after globals in interpreter_free. REPL: always NULL. */
     ASTNode*     program_ast;
+    /* Call stack (function names) for diagnostics — pushed in call_function */
+    char**       call_stack;
+    int          call_stack_len;
+    int          call_stack_cap;
+    /* Snapshot of call_stack at throw (for uncaught exception report after frames pop) */
+    char**       error_stack;
+    int          error_stack_len;
 } Interpreter;
 
 /* ─── API ─────────────────────────────────────────────── */
@@ -56,5 +63,8 @@ void interpreter_exec(Interpreter* interp, ASTNode* program);
 
 /* Evaluate a single expression and return the result */
 RizValue interpreter_eval(Interpreter* interp, ASTNode* node);
+
+/* After a run, report uncaught throw (sets had_error, clears signal). */
+void interpreter_report_pending_signal(Interpreter* interp);
 
 #endif /* RIZ_INTERPRETER_H */

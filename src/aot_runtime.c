@@ -163,6 +163,8 @@ extern RizValue native_as_bool(RizValue* a, int c);
 extern RizValue native_ord(RizValue* a, int c);
 extern RizValue native_chr(RizValue* a, int c);
 extern RizValue native_extend(RizValue* a, int c);
+extern RizValue native_debug(RizValue* a, int c);
+extern RizValue native_panic(RizValue* a, int c);
 
 void aot_setup_builtins(void) {
     aot_register_user_fn("range", (NativeFnPtr)native_range, -1);
@@ -186,6 +188,8 @@ void aot_setup_builtins(void) {
     aot_register_user_fn("ord", (NativeFnPtr)native_ord, 1);
     aot_register_user_fn("chr", (NativeFnPtr)native_chr, 1);
     aot_register_user_fn("extend", (NativeFnPtr)native_extend, 2);
+    aot_register_user_fn("debug", (NativeFnPtr)native_debug, -1);
+    aot_register_user_fn("panic", (NativeFnPtr)native_panic, -1);
 }
 
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args) {

@@ -99,6 +99,8 @@ const BUILTIN_HELP: Record<string, string> = {
   keys: "`keys(dict)` — list of keys.",
   values: "`values(dict)` — list of values.",
   assert: "`assert(cond, message?)` — runtime check.",
+  debug: "`debug(value, label?)` — print to stderr with source line; returns `value` (Rust-style `dbg!`).",
+  panic: "`panic(message?)` — print message and call stack, then `exit(1)`.",
   exit: "`exit(code?)` — terminate process.",
   read_file: "`read_file(path)` — file as string.",
   write_file: "`write_file(path, content)` — bool success.",
@@ -128,6 +130,8 @@ const BUILTIN_SIGNATURES: Record<string, { label: string; doc?: string; params?:
   map: { label: "map(list, fn)", params: [{ label: "list" }, { label: "fn" }] },
   filter: { label: "filter(list, fn)", params: [{ label: "list" }, { label: "fn" }] },
   clamp: { label: "clamp(value, lo, hi)", params: [{ label: "value" }, { label: "lo" }, { label: "hi" }] },
+  debug: { label: "debug(value, label?)", params: [{ label: "value" }, { label: "label?" }] },
+  panic: { label: "panic(message?)", params: [{ label: "message?" }] },
 };
 
 async function refreshFromWorkspaceConfig(): Promise<void> {

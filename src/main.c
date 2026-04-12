@@ -126,6 +126,7 @@ static void run_source(Interpreter* interp, const char* source, bool is_repl) {
         interp->program_ast = program;
         interpreter_exec(interp, program);
     }
+    interpreter_report_pending_signal(interp);
 }
 
 /* Execute a .riz file */
@@ -218,7 +219,7 @@ static void print_help(void) {
     printf(COL_YELLOW "  Built-in Functions:" COL_RESET "\n");
     printf("    print, len, range, type, str, int, float\n");
     printf("    input, append, pop, abs, min, max, sum\n");
-    printf("    map, filter, format, sorted, zip, assert, …\n");
+    printf("    map, filter, format, sorted, zip, assert, debug, panic, …\n");
     printf("    clamp, sign, floor, ceil, round, all, any, bool\n");
     printf("    ord, chr, extend, read_file, write_file, has_key\n\n");
 }
