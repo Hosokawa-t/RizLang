@@ -1,0 +1,9 @@
+{
+  "name": "p",
+  "version": "0.1.0",
+  "description": "Riz project (see riz.deps and dependencies)",
+  "packageIndex": "packages.index",
+  "dependencies": {
+    "demo": "https://github.com/octocat/Hello-World.git"
+  }
+}

@@ -141,6 +141,31 @@ void aot_load_plugin(const char* lib_path) {
 
 /* ─── FFI Dispatcher ───────────────────────────────── */
 
+/* ─── Builtin setup for AOT ───────────────────────── */
+extern RizValue native_range(RizValue* a, int c);
+extern RizValue native_len(RizValue* a, int c);
+extern RizValue native_type(RizValue* a, int c);
+extern RizValue native_str(RizValue* a, int c);
+extern RizValue native_int_cast(RizValue* a, int c);
+extern RizValue native_float_cast(RizValue* a, int c);
+extern RizValue native_abs(RizValue* a, int c);
+extern RizValue native_min(RizValue* a, int c);
+extern RizValue native_max(RizValue* a, int c);
+extern RizValue native_sum(RizValue* a, int c);
+
+void aot_setup_builtins(void) {
+    aot_register_user_fn("range", (NativeFnPtr)native_range, -1);
+    aot_register_user_fn("len", (NativeFnPtr)native_len, 1);
+    aot_register_user_fn("type", (NativeFnPtr)native_type, 1);
+    aot_register_user_fn("str", (NativeFnPtr)native_str, 1);
+    aot_register_user_fn("int", (NativeFnPtr)native_int_cast, 1);
+    aot_register_user_fn("float", (NativeFnPtr)native_float_cast, 1);
+    aot_register_user_fn("abs", (NativeFnPtr)native_abs, 1);
+    aot_register_user_fn("min", (NativeFnPtr)native_min, -1);
+    aot_register_user_fn("max", (NativeFnPtr)native_max, -1);
+    aot_register_user_fn("sum", (NativeFnPtr)native_sum, 1);
+}
+
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args) {
     for (int i = 0; i < aot_fn_count; i++) {
         if (strcmp(aot_fns[i].name, name) == 0) {

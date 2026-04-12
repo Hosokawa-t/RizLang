@@ -33,6 +33,8 @@ static char g_llama_exe[1024] = "llama-completion.exe";
 static char g_llama_exe[1024] = "llama-completion";
 #endif
 
+static int g_gpu_layers = 0;
+
 static const char* arg_str(RizPluginValue v) {
     if (v.type == VAL_STRING && v.as.string) return v.as.string;
     return NULL;
@@ -145,6 +147,13 @@ static RizPluginValue native_llama_set_cli(RizPluginValue* args, int argc) {
     return G.make_bool(true);
 }
 
+/* llama_set_gpu_layers(n) — set number of layers to offload to GPU (-ngl) */
+static RizPluginValue native_llama_set_gpu_layers(RizPluginValue* args, int argc) {
+    (void)argc;
+    g_gpu_layers = (int)arg_int(args[0]);
+    return G.make_none();
+}
+
 /*
  * llama_infer(model_path, prompt, max_tokens) -> string
  * Runs: llama-completion … -n N --simple-io --log-verbosity 0 --no-warmup
@@ -188,6 +197,14 @@ static RizPluginValue native_llama_infer(RizPluginValue* args, int argc) {
     append_shell_arg(cmd, &pos, sizeof(cmd), "--log-verbosity");
     append_shell_arg(cmd, &pos, sizeof(cmd), "0");
     append_shell_arg(cmd, &pos, sizeof(cmd), "--no-warmup");
+    append_shell_arg(cmd, &pos, sizeof(cmd), "--single-turn");
+
+    if (g_gpu_layers > 0) {
+        append_shell_arg(cmd, &pos, sizeof(cmd), "-ngl");
+        char nbuf[32];
+        snprintf(nbuf, sizeof(nbuf), "%d", g_gpu_layers);
+        append_shell_arg(cmd, &pos, sizeof(cmd), nbuf);
+    }
 
     FILE* fp = popen(cmd, "r");
     if (!fp) {
@@ -236,5 +253,6 @@ RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
 #endif
 
     api->register_fn(api->interp, "llama_set_cli", native_llama_set_cli, 1);
+    api->register_fn(api->interp, "llama_set_gpu_layers", native_llama_set_gpu_layers, 1);
     api->register_fn(api->interp, "llama_infer",  native_llama_infer,  3);
 }

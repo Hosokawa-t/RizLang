@@ -411,11 +411,11 @@ int main(int argc, char* argv[]) {
         char cmd[1024];
         if (use_gcc) {
             snprintf(cmd, sizeof(cmd),
-                "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" -lm",
+                "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" \"src/environment.c\" \"src/chunk.c\" \"src/interpreter.c\" \"src/diagnostic.c\" \"src/ast.c\" \"src/riz_import.c\" \"src/pkg.c\" \"src/lexer.c\" \"src/parser.c\" \"src/compiler.c\" \"src/vm.c\" \"src/codegen.c\" -lm",
                 exe_path, c_path);
         } else {
             snprintf(cmd, sizeof(cmd),
-                "vendor\\tcc\\tcc.exe -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\"",
+                "vendor\\tcc\\tcc.exe -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" \"src/environment.c\" \"src/chunk.c\" \"src/interpreter.c\" \"src/diagnostic.c\" \"src/ast.c\" \"src/riz_import.c\" \"src/pkg.c\" \"src/lexer.c\" \"src/parser.c\" \"src/compiler.c\" \"src/vm.c\" \"src/codegen.c\"",
                 exe_path, c_path);
         }
         

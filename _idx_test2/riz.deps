@@ -1,0 +1,3 @@
+# name<TAB>spec — spec: local path, path:C:\..., or git+https://...#branch
+# riz.deps overrides same package name from riz.json when merging
+demo	https://github.com/octocat/Hello-World.git

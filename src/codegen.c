@@ -246,6 +246,7 @@ static const char* emit_expr(ASTNode* node) {
                     case TOK_MINUS:     fprintf(G.out, "RizValue _t%d = aot_sub(%s, %s);\n", t, bl_s, br_s); break;
                     case TOK_STAR:      fprintf(G.out, "RizValue _t%d = aot_mul(%s, %s);\n", t, bl_s, br_s); break;
                     case TOK_SLASH:     fprintf(G.out, "RizValue _t%d = aot_div(%s, %s);\n", t, bl_s, br_s); break;
+                    case TOK_PERCENT:   fprintf(G.out, "RizValue _t%d = aot_mod(%s, %s);\n", t, bl_s, br_s); break;
                     case TOK_EQ:        fprintf(G.out, "RizValue _t%d = riz_bool(riz_value_equal(%s, %s));\n", t, bl_s, br_s); break;
                     case TOK_NEQ:       fprintf(G.out, "RizValue _t%d = riz_bool(!riz_value_equal(%s, %s));\n", t, bl_s, br_s); break;
                     case TOK_LT:        fprintf(G.out, "RizValue _t%d = riz_bool(aot_num(%s) < aot_num(%s));\n", t, bl_s, br_s); break;
@@ -454,6 +455,25 @@ static void emit_stmt(ASTNode* node) {
             G.indent--; ind(); fprintf(G.out, "}\n");
             break;
         }
+        case NODE_FOR_STMT: {
+            const char* iter = emit_expr_box(node->as.for_stmt.iterable);
+            char iter_buf[256]; strncpy(iter_buf, iter, 255); iter_buf[255] = '\0';
+            int t = new_tmp();
+            ind(); fprintf(G.out, "RizValue _iter%d = %s;\n", t, iter_buf);
+            ind(); fprintf(G.out, "if (_iter%d.type == VAL_LIST) {\n", t);
+            G.indent++;
+            ind(); fprintf(G.out, "for (int _i%d = 0; _i%d < _iter%d.as.list->count; _i%d++) {\n", t, t, t, t);
+            G.indent++;
+            ind(); fprintf(G.out, "RizValue %s = _iter%d.as.list->items[_i%d];\n", node->as.for_stmt.var_name, t, t);
+            aot_insert_sym(node->as.for_stmt.var_name, AOT_DYN, NULL);
+            if (node->as.for_stmt.body->type == NODE_BLOCK) {
+                for (int i = 0; i < node->as.for_stmt.body->as.block.count; i++)
+                    emit_stmt(node->as.for_stmt.body->as.block.statements[i]);
+            } else emit_stmt(node->as.for_stmt.body);
+            G.indent--; ind(); fprintf(G.out, "}\n");
+            G.indent--; ind(); fprintf(G.out, "}\n");
+            break;
+        }
         case NODE_RETURN_STMT: {
             const char* val = node->as.return_stmt.value ? emit_expr_box(node->as.return_stmt.value) : "riz_none()";
             char v_buf[256]; strncpy(v_buf, val, 255); v_buf[255] = '\0';
@@ -542,6 +562,7 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
     ind(); fprintf(G.out, "char* suffix = strstr(src_path, \"_aot.c\");\n");
     ind(); fprintf(G.out, "if (suffix) strcpy(suffix, \".riz\");\n");
     ind(); fprintf(G.out, "aot_source_path = src_path;\n");
+    ind(); fprintf(G.out, "aot_setup_builtins();\n");
     emit_fn_registrations(program);
     emit_stmt(program);
     ind(); fprintf(G.out, "return 0;\n}\n");

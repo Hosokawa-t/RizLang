@@ -1,0 +1,8 @@
+{
+  "name": "g",
+  "version": "0.1.0",
+  "description": "Riz project (see riz.deps and dependencies)",
+  "dependencies": {
+    "hello": "https://github.com/octocat/Hello-World.git"
+  }
+}

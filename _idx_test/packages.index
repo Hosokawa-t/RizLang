@@ -1,0 +1,2 @@
+# name<TAB>git-url-or-path — used by: riz pkg add <name>
+# Override file path with env RIZ_PACKAGE_INDEX or riz.json "packageIndex"

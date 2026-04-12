@@ -30,18 +30,18 @@ void riz_struct_add_method(RizStructDef* def, const char* name, RizValue fn_val)
  *  Built-in / Native Functions (Phase 1 + Phase 2)
  * ═══════════════════════════════════════════════════════ */
 
-static RizValue native_print(RizValue* args, int argc) {
+RizValue native_print(RizValue* args, int argc) {
     for (int i = 0; i < argc; i++) { if (i > 0) printf(" "); riz_value_print(args[i]); }
     printf("\n"); return riz_none();
 }
-static RizValue native_len(RizValue* args, int argc) {
+RizValue native_len(RizValue* args, int argc) {
     if (argc!=1){ riz_runtime_error("len() takes 1 argument"); return riz_none(); }
     if (args[0].type==VAL_LIST)   return riz_int(args[0].as.list->count);
     if (args[0].type==VAL_STRING) return riz_int((int64_t)strlen(args[0].as.string));
     if (args[0].type==VAL_DICT)   return riz_int(args[0].as.dict->count);
     riz_runtime_error("len() argument must be list, string, or dict"); return riz_none();
 }
-static RizValue native_range(RizValue* args, int argc) {
+RizValue native_range(RizValue* args, int argc) {
     int64_t start=0,stop=0,step=1;
     if (argc==1&&args[0].type==VAL_INT) stop=args[0].as.integer;
     else if (argc==2&&args[0].type==VAL_INT&&args[1].type==VAL_INT) { start=args[0].as.integer; stop=args[1].as.integer; }
@@ -53,12 +53,12 @@ static RizValue native_range(RizValue* args, int argc) {
     else        for(int64_t i=start;i>stop;i+=step) riz_list_append(list.as.list, riz_int(i));
     return list;
 }
-static RizValue native_type(RizValue* a, int c) { return c==1 ? riz_string(riz_value_type_name(a[0])) : riz_none(); }
-static RizValue native_str(RizValue* a, int c) {
+RizValue native_type(RizValue* a, int c) { return c==1 ? riz_string(riz_value_type_name(a[0])) : riz_none(); }
+RizValue native_str(RizValue* a, int c) {
     if (c!=1) return riz_none();
     char* s = riz_value_to_string(a[0]); return riz_string_take(s);
 }
-static RizValue native_int_cast(RizValue* a, int c) {
+RizValue native_int_cast(RizValue* a, int c) {
     if (c!=1) return riz_none();
     switch (a[0].type) {
         case VAL_INT: return a[0]; case VAL_FLOAT: return riz_int((int64_t)a[0].as.floating);
@@ -69,7 +69,7 @@ static RizValue native_int_cast(RizValue* a, int c) {
         default: riz_runtime_error("Cannot convert %s to int",riz_value_type_name(a[0])); return riz_none();
     }
 }
-static RizValue native_float_cast(RizValue* a, int c) {
+RizValue native_float_cast(RizValue* a, int c) {
     if (c!=1) return riz_none();
     switch (a[0].type) {
         case VAL_INT: return riz_float((double)a[0].as.integer); case VAL_FLOAT: return a[0];
@@ -80,28 +80,28 @@ static RizValue native_float_cast(RizValue* a, int c) {
         default: riz_runtime_error("Cannot convert %s to float",riz_value_type_name(a[0])); return riz_none();
     }
 }
-static RizValue native_input(RizValue* a, int c) {
+RizValue native_input(RizValue* a, int c) {
     if (c>0&&a[0].type==VAL_STRING) { printf("%s",a[0].as.string); fflush(stdout); }
     char buf[RIZ_LINE_BUF_SIZE];
     if (fgets(buf,sizeof(buf),stdin)) { size_t l=strlen(buf); if(l>0&&buf[l-1]=='\n')buf[l-1]='\0'; return riz_string(buf); }
     return riz_string("");
 }
-static RizValue native_append(RizValue* a, int c) {
+RizValue native_append(RizValue* a, int c) {
     if (c!=2||a[0].type!=VAL_LIST) { riz_runtime_error("append(list, val) expected"); return riz_none(); }
     riz_list_append(a[0].as.list, riz_value_copy(a[1])); return riz_none();
 }
-static RizValue native_pop(RizValue* a, int c) {
+RizValue native_pop(RizValue* a, int c) {
     if (c!=1||a[0].type!=VAL_LIST) return riz_none();
     RizList* l=a[0].as.list; if(l->count==0){riz_runtime_error("pop() from empty list");return riz_none();}
     return l->items[--l->count];
 }
-static RizValue native_abs(RizValue* a, int c) {
+RizValue native_abs(RizValue* a, int c) {
     if (c!=1) return riz_none();
     if (a[0].type==VAL_INT){ int64_t v=a[0].as.integer; return riz_int(v<0?-v:v); }
     if (a[0].type==VAL_FLOAT) return riz_float(fabs(a[0].as.floating));
     return riz_none();
 }
-static RizValue native_min(RizValue* a, int c) {
+RizValue native_min(RizValue* a, int c) {
     if (c==0) return riz_none();
     if (c==1&&a[0].type==VAL_LIST) {
         RizList*l=a[0].as.list; if(!l->count)return riz_none(); RizValue b=l->items[0];
@@ -111,7 +111,7 @@ static RizValue native_min(RizValue* a, int c) {
     RizValue b=a[0]; for(int i=1;i<c;i++){double bv=b.type==VAL_INT?(double)b.as.integer:b.as.floating;double cv=a[i].type==VAL_INT?(double)a[i].as.integer:a[i].as.floating;if(cv<bv)b=a[i];}
     return riz_value_copy(b);
 }
-static RizValue native_max(RizValue* a, int c) {
+RizValue native_max(RizValue* a, int c) {
     if (c==0) return riz_none();
     if (c==1&&a[0].type==VAL_LIST) {
         RizList*l=a[0].as.list; if(!l->count)return riz_none(); RizValue b=l->items[0];
@@ -121,7 +121,7 @@ static RizValue native_max(RizValue* a, int c) {
     RizValue b=a[0]; for(int i=1;i<c;i++){double bv=b.type==VAL_INT?(double)b.as.integer:b.as.floating;double cv=a[i].type==VAL_INT?(double)a[i].as.integer:a[i].as.floating;if(cv>bv)b=a[i];}
     return riz_value_copy(b);
 }
-static RizValue native_sum(RizValue* a, int c) {
+RizValue native_sum(RizValue* a, int c) {
     if (c!=1||a[0].type!=VAL_LIST) return riz_none();
     bool hf=false; double t=0;
     for(int i=0;i<a[0].as.list->count;i++){

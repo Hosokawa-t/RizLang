@@ -1,0 +1,8 @@
+{
+  "name": "idxdemo",
+  "version": "0.1.0",
+  "description": "Riz project (see riz.deps and dependencies)",
+  "packageIndex": "packages.index",
+  "dependencies": {
+  }
+}

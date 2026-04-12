@@ -22,3 +22,9 @@ editors/riz-vscode/bundled/
 editors/riz-vscode/*.vsix
 vendor/
 .riz/
+*.gguf
+comp_*.py
+comp_*.riz
+pi_bench.riz
+pi_bench.py
+.riz/

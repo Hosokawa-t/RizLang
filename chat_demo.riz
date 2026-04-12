@@ -1,0 +1,38 @@
+import_native "plugin_llama_cli.dll"
+
+# CLI のフルパスを指定
+llama_set_cli("D:\\Riz\\tools\\llama_test\\bin\\llama-completion.exe")
+llama_set_gpu_layers(32) # GPUレイヤー数を指定（32層をVRAMへ）
+
+let model = "D:\\Riz\\examples\\mel_7b_q8_0.gguf"
+
+print("============================================================")
+print("  Riz Native LLM Chat Demo")
+print("============================================================")
+print("Model: mel_7b_q8_0.gguf (8GB)")
+print("Note: GPU Acceleration enabled (-ngl 32)")
+print("Note: This is a large model. Loading might take some time.")
+print("============================================================")
+
+mut running = true
+while running {
+    # input() を使うと対話的に入力を受け取れます
+    print("\n[You]")
+    let user_input = input("> ")
+    
+    if user_input == "" {
+        running = false
+    } else {
+        if user_input == "exit" {
+            running = false
+        } else {
+            print("\n[Riz AI thinking...]")
+            # llama_infer(model_path, prompt, max_tokens)
+            let response = llama_infer(model, user_input, 64)
+            print("\n[AI Response]")
+            print(response)
+        }
+    }
+}
+
+print("\nChat ended.")

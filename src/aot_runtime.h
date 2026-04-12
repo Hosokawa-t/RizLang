@@ -22,6 +22,7 @@ void aot_panic(void* interp, const char* msg);
 /* AOT FFI Loader API */
 void aot_load_plugin(const char* lib_path);
 void aot_register_user_fn(const char* name, NativeFnPtr fn, int arity);
+void aot_setup_builtins(void);
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args);
 
 /* AOT Math wrappers */
