@@ -15,6 +15,8 @@
 #include "vm.h"
 #include "codegen.h"
 #include "diagnostic.h"
+#include "pkg.h"
+#include "riz_import.h"
 
 /* ═══════════════════════════════════════════════════════
  *  File reading
@@ -120,12 +122,14 @@ static void run_source(Interpreter* interp, const char* source, bool is_repl) {
             ast_free(program);
             return;
         }
+        interp->program_ast = program;
         interpreter_exec(interp, program);
     }
 }
 
 /* Execute a .riz file */
 static int run_file(const char* path) {
+    riz_import_configure(path);
     char* source = read_file(path);
     if (!source) return 1;
 
@@ -140,6 +144,7 @@ static int run_file(const char* path) {
 
 /* Execute a .riz file via the Bytecode VM */
 static int run_file_vm(const char* path) {
+    riz_import_configure(path);
     char* source = read_file(path);
     if (!source) return 1;
 
@@ -307,6 +312,14 @@ static void run_repl(void) {
 int main(int argc, char* argv[]) {
     riz_enable_ansi();
 
+    if (argc >= 2 && strcmp(argv[1], "pkg") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: riz pkg <init|add|install|update|sync|tree> ...  (try: riz pkg --help)\n");
+            return 1;
+        }
+        return riz_pkg_main(argc - 2, argv + 2);
+    }
+
     if (argc == 1) {
         /* No arguments → REPL mode */
         run_repl();
@@ -325,7 +338,8 @@ int main(int argc, char* argv[]) {
             printf("  -v, --version    Show version\n");
             printf("  -h, --help       Show this help\n");
             printf("  --vm <file>      Run file via Bytecode VM (experimental)\n");
-            printf("  check <file>     Parse only; print NDJSON diagnostics to stdout\n\n");
+            printf("  check <file>     Parse only; print NDJSON diagnostics to stdout\n");
+            printf("  pkg <cmd>        Package manager (install --locked, packages.index, …)\n\n");
             printf("If no file is given, starts the interactive REPL.\n");
             return 0;
         }

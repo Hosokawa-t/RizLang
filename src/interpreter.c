@@ -13,6 +13,8 @@
 #include "interpreter.h"
 #include "lexer.h"
 #include "parser.h"
+#include "riz_import.h"
+#include "riz_plugin.h"
 
 /* ═══ Forward declarations ═══ */
 
@@ -542,12 +544,15 @@ static RizValue eval_method_call(Interpreter* I, ASTNode* node) {
  *  Phase 5: FFI Plugin Loader
  * ═══════════════════════════════════════════════════════ */
 
-#include "riz_plugin.h"
-
 /* FFI API callbacks — these are passed to plugins so they can register functions */
 static void ffi_register_fn(void* interp_ptr, const char* name, RizPluginFn fn, int arity) {
     Interpreter* I = (Interpreter*)interp_ptr;
     env_define(I->globals, name, riz_native(name, (NativeFnPtr)fn, arity), false);
+}
+
+static void ffi_register_fn_vm(void* interp_ptr, const char* name, RizPluginFn fn, int arity) {
+    RizVM* vm = (RizVM*)interp_ptr;
+    env_define(vm->globals, name, riz_native(name, (NativeFnPtr)fn, arity), false);
 }
 
 static RizPluginValue ffi_make_int(int64_t v)      { return riz_int(v); }
@@ -575,6 +580,11 @@ static int ffi_get_current_line(void* interp) {
     return I->current_line;
 }
 
+static int ffi_get_current_line_vm(void* interp) {
+    (void)interp;
+    return 0;
+}
+
 static void ffi_panic(void* interp, const char* msg) {
     Interpreter* I = (Interpreter*)interp;
     fprintf(stderr, "\n\033[1;31m[Riz AI Panic]\033[0m %s\n", msg);
@@ -583,6 +593,74 @@ static void ffi_panic(void* interp, const char* msg) {
     /* Optional: We could cleanly longjmp out, but for plugin panics mimicking AOT 
        we can just exit for now or let the runtime error system handle it. */
     exit(1);
+}
+
+static void ffi_panic_vm(void* interp, const char* msg) {
+    RizVM* vm = (RizVM*)interp;
+    fprintf(stderr, "\n\033[1;31m[Riz VM plugin panic]\033[0m %s\n", msg);
+    vm->had_error = true;
+    exit(1);
+}
+
+bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path) {
+#ifdef _WIN32
+    HMODULE lib = LoadLibraryA(path);
+    if (!lib) {
+        riz_runtime_error("Failed to load native library '%s' (error %lu)", path, GetLastError());
+        return false;
+    }
+    RizPluginInitFn init_fn = (RizPluginInitFn)GetProcAddress(lib, "riz_plugin_init");
+    if (!init_fn) {
+        riz_runtime_error("Library '%s' has no 'riz_plugin_init' entry point", path);
+        FreeLibrary(lib);
+        return false;
+    }
+#else
+    #include <dlfcn.h>
+    void* lib = dlopen(path, RTLD_NOW);
+    if (!lib) {
+        riz_runtime_error("Failed to load native library '%s': %s", path, dlerror());
+        return false;
+    }
+    RizPluginInitFn init_fn = (RizPluginInitFn)dlsym(lib, "riz_plugin_init");
+    if (!init_fn) {
+        riz_runtime_error("Library '%s' has no 'riz_plugin_init' entry point", path);
+        dlclose(lib);
+        return false;
+    }
+#endif
+    RizPluginAPI api;
+    api.register_fn = ffi_register_fn_vm;
+    api.make_int = ffi_make_int;
+    api.make_float = ffi_make_float;
+    api.make_bool = ffi_make_bool;
+    api.make_string = ffi_make_string;
+    api.make_none = ffi_make_none;
+    api.make_list = ffi_make_list;
+    api.make_native_ptr = ffi_make_native_ptr;
+    api.get_native_ptr = ffi_get_native_ptr;
+    api.list_append = ffi_list_append;
+    api.list_length = ffi_list_len;
+    api.list_get = ffi_list_get;
+    api.interp = vm;
+    api.get_current_line = ffi_get_current_line_vm;
+    api.panic = ffi_panic_vm;
+    (void)env;
+    init_fn(&api);
+
+    void** np = (void**)realloc(vm->native_libs, sizeof(void*) * (size_t)(vm->native_lib_count + 1));
+    if (!np) {
+        riz_runtime_error("Out of memory tracking native library");
+#ifdef _WIN32
+        FreeLibrary(lib);
+#else
+        dlclose(lib);
+#endif
+        return false;
+    }
+    vm->native_libs = np;
+    vm->native_libs[vm->native_lib_count++] = lib;
+    return true;
 }
 
 static bool load_native_plugin(Interpreter* I, const char* path) {
@@ -638,8 +716,7 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     return true;
 }
 
-static void register_builtins(Interpreter* I) {
-    Environment* g = I->globals;
+void riz_vm_seed_builtins(Environment* g) {
     /* Phase 1 */
     env_define(g, "print",    riz_native("print",    native_print,      -1), false);
     env_define(g, "len",      riz_native("len",      native_len,         1), false);
@@ -672,6 +749,10 @@ static void register_builtins(Interpreter* I) {
     env_define(g, "has_key",  riz_native("has_key",  native_has_key,     2), false);
 }
 
+static void register_builtins(Interpreter* I) {
+    riz_vm_seed_builtins(I->globals);
+}
+
 /* ═══════════════════════════════════════════════════════
  *  Interpreter lifecycle
  * ═══════════════════════════════════════════════════════ */
@@ -686,6 +767,7 @@ Interpreter* interpreter_new(void) {
     I->import_count = 0;
     I->loaded_libs = NULL;
     I->lib_count = 0;
+    I->program_ast = NULL;
     register_builtins(I);
     return I;
 }
@@ -694,7 +776,9 @@ void interpreter_free(Interpreter* interp) {
     if (!interp) return;
     for (int i = 0; i < interp->import_count; i++) free(interp->imported_files[i]);
     free(interp->imported_files);
-    /* Unload native plugins */
+    env_free_deep(interp->globals);
+    interp->globals = NULL;
+    /* Unload native plugins after releasing globals (native fn wrappers). */
     for (int i = 0; i < interp->lib_count; i++) {
 #ifdef _WIN32
         FreeLibrary((HMODULE)interp->loaded_libs[i]);
@@ -703,7 +787,10 @@ void interpreter_free(Interpreter* interp) {
 #endif
     }
     free(interp->loaded_libs);
-    env_free(interp->globals);
+    if (interp->program_ast) {
+        ast_free(interp->program_ast);
+        interp->program_ast = NULL;
+    }
     free(interp);
 }
 
@@ -765,16 +852,21 @@ static RizValue native_filter(RizValue* a, int c) {
  * ═══════════════════════════════════════════════════════ */
 
 static void run_import(Interpreter* I, const char* path) {
+    char resolved[1024];
+    const char* use_path = path;
+    if (riz_import_resolve(resolved, sizeof(resolved), path))
+        use_path = resolved;
+
     /* Check if already imported */
     for (int i = 0; i < I->import_count; i++)
-        if (strcmp(I->imported_files[i], path) == 0) return;
+        if (strcmp(I->imported_files[i], use_path) == 0) return;
 
     /* Track */
     I->imported_files = (char**)realloc(I->imported_files, sizeof(char*) * (I->import_count + 1));
-    I->imported_files[I->import_count++] = riz_strdup(path);
+    I->imported_files[I->import_count++] = riz_strdup(use_path);
 
     /* Read file */
-    FILE* f = fopen(path, "rb");
+    FILE* f = fopen(use_path, "rb");
     if (!f) { riz_runtime_error("Cannot import '%s': file not found", path); return; }
     fseek(f, 0, SEEK_END); long length = ftell(f); fseek(f, 0, SEEK_SET);
     char* source = (char*)malloc(length + 1);

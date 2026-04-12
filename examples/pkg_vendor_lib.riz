@@ -1,0 +1,4 @@
+# Tiny module for VM / pkg smoke tests (no I/O at load time).
+fn double_it(x) {
+    return x * 2
+}

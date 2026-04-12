@@ -13,4 +13,7 @@
  * Returns true on success, false on compile error. */
 bool compiler_compile(ASTNode* program, Chunk* chunk);
 
+/* If module_return: emit OP_RETURN instead of OP_HALT (VM import sub-modules). */
+bool compiler_compile_ex(ASTNode* program, Chunk* chunk, bool module_return);
+
 #endif /* RIZ_COMPILER_H */

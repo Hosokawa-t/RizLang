@@ -21,6 +21,8 @@ gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz.exe ^
     src/compiler.c ^
     src/vm.c ^
     src/codegen.c ^
+    src/pkg.c ^
+    src/riz_import.c ^
     -lm
 
 if %ERRORLEVEL% EQU 0 (

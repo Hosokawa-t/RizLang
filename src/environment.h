@@ -31,6 +31,9 @@ Environment* env_new(Environment* parent);
 /* Free an environment (does NOT free parent) */
 void env_free(Environment* env);
 
+/* Free environment and release all bound values (riz_value_free each entry). */
+void env_free_deep(Environment* env);
+
 /* Define a new variable in the current scope */
 bool env_define(Environment* env, const char* name, RizValue value, bool is_mutable);
 

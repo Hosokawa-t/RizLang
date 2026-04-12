@@ -13,7 +13,9 @@
  */
 
 #include "compiler.h"
+#include "vm.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ─── Compiler State ──────────────────────────────────── */
@@ -36,6 +38,7 @@ typedef struct {
 } Compiler;
 
 static Compiler C;
+static bool inside_fn = false;
 
 /* ─── Register allocator ──────────────────────────────── */
 
@@ -117,6 +120,10 @@ static int add_local(const char* name) {
 static int  compile_expr(ASTNode* node);
 static void compile_into(ASTNode* node, int dest);
 static void compile_stmt(ASTNode* node);
+static Chunk* compile_fn_body(ASTNode* fn_decl, int* stack_slots_out, bool* err_out);
+static void compile_top_level_fn(ASTNode* node);
+static int compile_lt_regs(int lhs, int rhs, int line);
+static int emit_len_call(int list_r, int line);
 
 /* ─── Expression compilation ──────────────────────────── */
 /*
@@ -339,6 +346,16 @@ static int compile_expr(ASTNode* node) {
             return dest;
         }
 
+        case NODE_INDEX: {
+            int obj_r = compile_expr(node->as.index_expr.object);
+            int idx_r = compile_expr(node->as.index_expr.index);
+            int dest = alloc_reg();
+            emit(RIZ_ABC(OP_GETINDEX, dest, obj_r, idx_r), line);
+            free_reg(idx_r);
+            free_reg(obj_r);
+            return dest;
+        }
+
         default:
             fprintf(stderr, "[compiler] Unhandled expr node %d at line %d\n", node->type, line);
             C.had_error = true;
@@ -352,6 +369,135 @@ static void compile_into(ASTNode* node, int dest) {
     if (r != dest) {
         emit(RIZ_ABC(OP_MOVE, dest, r, 0), node->line);
     }
+    free_reg(r);
+}
+
+/* R[a] < R[b] → bool in new register (same pattern as NODE_BINARY TOK_LT) */
+static int compile_lt_regs(int lhs, int rhs, int line) {
+    int dest = alloc_reg();
+    emit(RIZ_ABC(OP_LT, 1, lhs, rhs), line);
+    int skip = emit_jmp(line);
+    emit(RIZ_ABC(OP_LOADBOOL, dest, 0, 0), line);
+    int done = emit_jmp(line);
+    patch_jmp(skip);
+    emit(RIZ_ABC(OP_LOADBOOL, dest, 1, 0), line);
+    patch_jmp(done);
+    return dest;
+}
+
+/* len(list_r) → result register (overwrites len fn slot) */
+static int emit_len_call(int list_r, int line) {
+    int fnr = alloc_reg();
+    emit(RIZ_ABx(OP_GETGLOBAL, fnr, add_string_const("len")), line);
+    int arg = alloc_reg();
+    emit(RIZ_ABC(OP_MOVE, arg, list_r, 0), line);
+    if (arg != fnr + 1) {
+        fprintf(stderr, "[compiler] internal: len() call needs consecutive arg reg\n");
+        C.had_error = true;
+        return fnr;
+    }
+    emit(RIZ_ABC(OP_CALL, fnr, 2, 2), line);
+    return fnr;
+}
+
+/* ─── User-defined functions (VM bytecode closure) ────── */
+
+static Chunk* compile_fn_body(ASTNode* fn_decl, int* stack_slots_out, bool* err_out) {
+    Chunk* ch = (Chunk*)malloc(sizeof(Chunk));
+    if (!ch) {
+        *err_out = true;
+        return NULL;
+    }
+    chunk_init(ch);
+
+    Compiler saved = C;
+    bool was_inside = inside_fn;
+    C.chunk = ch;
+    C.had_error = false;
+    C.free_reg = 0;
+    C.max_reg = 0;
+    C.local_count = 0;
+    C.scope_depth = 0;
+    inside_fn = true;
+
+    for (int i = 0; i < fn_decl->as.fn_decl.param_count; i++)
+        add_local(fn_decl->as.fn_decl.params[i]);
+
+    ASTNode* body = fn_decl->as.fn_decl.body;
+    if (!body) {
+        fprintf(stderr, "[compiler] function has no body\n");
+        C.had_error = true;
+    } else if (body->type == NODE_BLOCK) {
+        for (int i = 0; i < body->as.block.count; i++)
+            compile_stmt(body->as.block.statements[i]);
+    } else {
+        compile_stmt(body);
+    }
+
+    if (!C.had_error) {
+        emit(RIZ_ABC(OP_LOADNIL, 0, 0, 0), fn_decl->line);
+        emit(RIZ_ABC(OP_RETURN, 0, 2, 0), fn_decl->line);
+    }
+
+    int slots = C.max_reg;
+    if (slots < fn_decl->as.fn_decl.param_count)
+        slots = fn_decl->as.fn_decl.param_count;
+    *stack_slots_out = slots;
+    *err_out = C.had_error;
+
+    inside_fn = was_inside;
+    C = saved;
+    return ch;
+}
+
+static void compile_top_level_fn(ASTNode* node) {
+    ASTNode* fd = node;
+    if (!fd->as.fn_decl.body) {
+        fprintf(stderr, "[compiler] function '%s' has no body\n", fd->as.fn_decl.name);
+        C.had_error = true;
+        return;
+    }
+    if (fd->as.fn_decl.param_defaults) {
+        for (int i = 0; i < fd->as.fn_decl.param_count; i++) {
+            if (fd->as.fn_decl.param_defaults[i]) {
+                fprintf(stderr, "[compiler] VM: default parameters are not supported yet\n");
+                C.had_error = true;
+                return;
+            }
+        }
+    }
+
+    int slots;
+    bool fn_err;
+    Chunk* sub = compile_fn_body(node, &slots, &fn_err);
+    if (fn_err || !sub) {
+        if (sub) {
+            chunk_free(sub);
+            free(sub);
+        }
+        C.had_error = true;
+        return;
+    }
+    sub->stack_slots = slots;
+
+    RizVMClosure* cl = (RizVMClosure*)malloc(sizeof(RizVMClosure));
+    if (!cl) {
+        chunk_free(sub);
+        free(sub);
+        C.had_error = true;
+        return;
+    }
+    cl->chunk = sub;
+    cl->param_count = fd->as.fn_decl.param_count;
+    cl->stack_slots = slots;
+    cl->name = riz_strdup(fd->as.fn_decl.name);
+
+    RizValue v = riz_vm_closure_val(cl);
+    int k = chunk_add_constant(C.chunk, v);
+    int r = alloc_reg();
+    emit(RIZ_ABx(OP_LOADK, r, k), node->line);
+    int namek = add_string_const(fd->as.fn_decl.name);
+    emit(RIZ_ABx(OP_SETGLOBAL, r, namek), node->line);
     free_reg(r);
 }
 
@@ -445,6 +591,85 @@ static void compile_stmt(ASTNode* node) {
             break;
         }
 
+        case NODE_FOR_STMT: {
+            begin_scope();
+            int list_r = compile_expr(node->as.for_stmt.iterable);
+            int idx_r = alloc_reg();
+            int k0 = add_const(riz_int(0));
+            emit(RIZ_ABx(OP_LOADK, idx_r, k0), line);
+
+            int len_r = emit_len_call(list_r, line);
+            if (C.had_error) {
+                end_scope();
+                break;
+            }
+
+            int var_slot = add_local(node->as.for_stmt.var_name);
+
+            int loop_start = C.chunk->count;
+
+            int cond_r = compile_lt_regs(idx_r, len_r, line);
+            emit(RIZ_ABC(OP_TEST, cond_r, 0, 0), line);
+            int exit_jmp = emit_jmp(line);
+            free_reg(cond_r);
+
+            emit(RIZ_ABC(OP_GETINDEX, var_slot, list_r, idx_r), line);
+            compile_stmt(node->as.for_stmt.body);
+
+            int k1 = add_const(riz_int(1));
+            int one_r = alloc_reg();
+            emit(RIZ_ABx(OP_LOADK, one_r, k1), line);
+            emit(RIZ_ABC(OP_ADD, idx_r, idx_r, one_r), line);
+            free_reg(one_r);
+
+            int offset = loop_start - C.chunk->count - 1;
+            emit(RIZ_AsBx(OP_JMP, 0, offset), line);
+
+            patch_jmp(exit_jmp);
+            end_scope();
+            break;
+        }
+
+        case NODE_RETURN_STMT:
+            if (!inside_fn) {
+                fprintf(stderr, "[compiler] 'return' outside function (VM)\n");
+                C.had_error = true;
+                break;
+            }
+            {
+                ASTNode* val = node->as.return_stmt.value;
+                if (!val) {
+                    emit(RIZ_ABC(OP_LOADNIL, 0, 0, 0), line);
+                } else {
+                    int r = compile_expr(val);
+                    if (r != 0)
+                        emit(RIZ_ABC(OP_MOVE, 0, r, 0), line);
+                }
+                emit(RIZ_ABC(OP_RETURN, 0, 2, 0), line);
+            }
+            break;
+
+        case NODE_FN_DECL:
+            if (inside_fn) {
+                fprintf(stderr, "[compiler] nested functions are not supported for VM bytecode\n");
+                C.had_error = true;
+                break;
+            }
+            compile_top_level_fn(node);
+            break;
+
+        case NODE_IMPORT: {
+            int k = add_string_const(node->as.import_stmt.path);
+            emit(RIZ_ABx(OP_IMPORT, 0, k), line);
+            break;
+        }
+
+        case NODE_IMPORT_NATIVE: {
+            int k = add_string_const(node->as.import_native.path);
+            emit(RIZ_ABx(OP_IMPORT_NATIVE, 0, k), line);
+            break;
+        }
+
         case NODE_PROGRAM:
             for (int i = 0; i < node->as.program.count; i++) {
                 compile_stmt(node->as.program.declarations[i]);
@@ -460,16 +685,29 @@ static void compile_stmt(ASTNode* node) {
 
 /* ─── Public API ──────────────────────────────────────── */
 
-bool compiler_compile(ASTNode* program, Chunk* chunk) {
+bool compiler_compile_ex(ASTNode* program, Chunk* chunk, bool module_return) {
     C.chunk = chunk;
     C.had_error = false;
     C.free_reg = 0;
     C.max_reg = 0;
     C.local_count = 0;
     C.scope_depth = 0;
+    inside_fn = false;
 
     compile_stmt(program);
-    emit(RIZ_ABC(OP_HALT, 0, 0, 0), 0);
+    chunk->stack_slots = C.max_reg > 0 ? C.max_reg : RIZ_REG_MAX;
+    if (chunk->stack_slots > RIZ_REG_MAX)
+        chunk->stack_slots = RIZ_REG_MAX;
+    if (module_return) {
+        emit(RIZ_ABC(OP_LOADNIL, 0, 0, 0), 0);
+        emit(RIZ_ABC(OP_RETURN, 0, 1, 0), 0);
+    } else {
+        emit(RIZ_ABC(OP_HALT, 0, 0, 0), 0);
+    }
 
     return !C.had_error;
+}
+
+bool compiler_compile(ASTNode* program, Chunk* chunk) {
+    return compiler_compile_ex(program, chunk, false);
 }

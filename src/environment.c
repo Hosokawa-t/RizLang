@@ -4,6 +4,7 @@
  */
 
 #include "environment.h"
+#include "value.h"
 
 /* ═══════════════════════════════════════════════════════
  *  Create / Free
@@ -23,6 +24,17 @@ void env_free(Environment* env) {
     for (int i = 0; i < env->count; i++) {
         free(env->entries[i].name);
         /* Don't free values deeply — they may be referenced elsewhere */
+    }
+    free(env->entries);
+    free(env);
+}
+
+void env_free_deep(Environment* env) {
+    if (!env) return;
+    /* Reverse order: later bindings often reference earlier ones (e.g. instances before struct defs). */
+    for (int i = env->count - 1; i >= 0; i--) {
+        riz_value_free(&env->entries[i].value);
+        free(env->entries[i].name);
     }
     free(env->entries);
     free(env);

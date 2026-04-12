@@ -20,3 +20,5 @@ editors/riz-vscode/node_modules/
 editors/riz-vscode/out/
 editors/riz-vscode/bundled/
 editors/riz-vscode/*.vsix
+vendor/
+.riz/

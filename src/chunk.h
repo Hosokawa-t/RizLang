@@ -71,6 +71,12 @@ typedef enum {
     /* I/O */
     OP_PRINT,       /* A B      print R[A]..R[A+B-1]                    */
 
+    /* Containers */
+    OP_GETINDEX,    /* A B C    R[A] = copy of R[B][R[C]] (list + int index) */
+
+    OP_IMPORT,       /* A Bx     load + run imported module (path in K[Bx]) */
+    OP_IMPORT_NATIVE,/* A Bx    dlopen plugin (path string in K[Bx])   */
+
     /* Halt */
     OP_HALT,        /*          stop execution                          */
 
@@ -78,7 +84,7 @@ typedef enum {
 } OpCode;
 
 /* ─── Chunk ───────────────────────────────────────────── */
-typedef struct {
+typedef struct Chunk {
     RizInstr* code;         /* 32-bit instruction stream */
     int       count;
     int       capacity;
@@ -88,6 +94,8 @@ typedef struct {
     RizValue* constants;    /* constant pool */
     int       const_count;
     int       const_cap;
+
+    int       stack_slots;  /* register window size (set by compiler, for VM frames) */
 } Chunk;
 
 /* ─── API ─────────────────────────────────────────────── */

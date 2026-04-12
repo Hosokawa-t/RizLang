@@ -1,0 +1,5 @@
+# Interpreter shutdown smoke: functions + structs (covers env_free_deep + program_ast)
+struct Point { x, y }
+fn dist(p) => p.x * p.x + p.y * p.y
+let origin = Point(0, 0)
+print("ok", dist(origin))

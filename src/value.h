@@ -12,6 +12,7 @@
 typedef struct ASTNode ASTNode;
 typedef struct Environment Environment;
 typedef struct RizValue RizValue;
+typedef struct Chunk Chunk;
 
 /* ─── Value Types ─────────────────────────────────────── */
 typedef enum {
@@ -27,7 +28,8 @@ typedef enum {
     VAL_STRUCT_DEF,
     VAL_INSTANCE,
     VAL_TRAIT_DEF,
-    VAL_NATIVE_PTR     /* Opaque pointer to plugin-owned data (e.g. Tensor) */
+    VAL_NATIVE_PTR,    /* Opaque pointer to plugin-owned data (e.g. Tensor) */
+    VAL_VM_CLOSURE     /* Bytecode function for the register VM (separate from AST RizFunction) */
 } ValueType;
 
 /* ─── Native Function Pointer ─────────────────────────── */
@@ -89,6 +91,15 @@ typedef struct {
     int         arity;   /* -1 = variadic */
 } NativeFnObj;
 
+/* ─── VM bytecode closure (compiler + vm_execute) ─────── */
+typedef struct RizVMClosure {
+    Chunk* chunk;
+    int    param_count;
+    int    stack_slots; /* register window; >= param_count */
+    char*  name;
+    int    ref_count;   /* shared with constant pool + globals + registers */
+} RizVMClosure;
+
 /* ─── Riz Trait Definition ──────────────────────────────── */
 typedef struct {
     char*  name;
@@ -123,6 +134,7 @@ struct RizValue {
         RizInstance*  instance;
         RizTraitDef*  trait_def;
         RizNativePtr* native_ptr;   /* Opaque handle to plugin data */
+        RizVMClosure* vm_closure;
     } as;
 };
 
@@ -139,6 +151,7 @@ RizValue riz_list_new(void);
 RizValue riz_struct_def_new(const char* name, char** fields, int field_count);
 RizValue riz_instance_new(RizStructDef* def, RizValue* field_values);
 RizValue riz_native_ptr(void* ptr, const char* type_tag, RizPtrDestructor dtor);
+RizValue riz_vm_closure_val(RizVMClosure* cl); /* takes ownership of cl and cl->chunk */
 
 /* ─── Operations ──────────────────────────────────────── */
 void     riz_value_print(RizValue v);

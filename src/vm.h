@@ -19,9 +19,18 @@
 
 /* ─── Call Frame ──────────────────────────────────────── */
 typedef struct {
-    Chunk*    chunk;
-    RizInstr* ip;           /* instruction pointer */
-    RizValue* regs;         /* base of register window for this frame */
+    Chunk*      chunk;
+    RizInstr*   ip;
+    RizValue*   regs;
+    int         reg_base;
+    int         window_size;
+
+    uint8_t     caller_result_reg;
+    RizInstr*   caller_resume_ip;
+    Chunk*      caller_chunk;
+    RizValue*   caller_regs;
+    /* If non-NULL, chunk is freed when this frame returns (OP_IMPORT submodule). */
+    Chunk*      owned_import_chunk;
 } CallFrame;
 
 /* ─── Virtual Machine ─────────────────────────────────── */
@@ -35,6 +44,14 @@ typedef struct {
 
     Environment* globals;
     bool         had_error;
+
+    /* Resolved paths already loaded via OP_IMPORT (VM import graph). */
+    char**      imported_paths;
+    int         imported_count;
+
+    /* Native plugins loaded via OP_IMPORT_NATIVE (FreeLibrary/dlclose on vm_free). */
+    void**      native_libs;
+    int         native_lib_count;
 } RizVM;
 
 /* ─── Result ──────────────────────────────────────────── */

@@ -13,12 +13,16 @@ void chunk_init(Chunk* chunk) {
     chunk->constants = NULL;
     chunk->const_count = 0;
     chunk->const_cap = 0;
+    chunk->stack_slots = 0;
 }
 
 void chunk_free(Chunk* chunk) {
+    for (int i = 0; i < chunk->const_count; i++) {
+        riz_value_free(&chunk->constants[i]);
+    }
+    free(chunk->constants);
     free(chunk->code);
     free(chunk->lines);
-    free(chunk->constants);
     chunk_init(chunk);
 }
 

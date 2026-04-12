@@ -8,6 +8,7 @@
 
 #include "ast.h"
 #include "environment.h"
+#include "vm.h"
 
 /* ─── Signal Types for control flow ───────────────────── */
 typedef enum {
@@ -32,9 +33,17 @@ typedef struct {
     /* FFI: loaded native libraries (Phase 5) */
     void**       loaded_libs;   /* HMODULE handles (Windows) / dlopen handles (POSIX) */
     int          lib_count;
+    /* File runs: root AST; freed after globals in interpreter_free. REPL: always NULL. */
+    ASTNode*     program_ast;
 } Interpreter;
 
 /* ─── API ─────────────────────────────────────────────── */
+
+/* Register the same built-ins as the interpreter uses (for the bytecode VM globals). */
+void riz_vm_seed_builtins(Environment* env);
+
+/* Load a native .dll/.so into VM globals (same riz_plugin_init as interpreter). */
+bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path);
 
 /* Create and initialize an interpreter with built-in functions */
 Interpreter* interpreter_new(void);

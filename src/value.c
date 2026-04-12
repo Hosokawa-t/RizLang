@@ -4,6 +4,7 @@
  */
 
 #include "value.h"
+#include "chunk.h"
 
 /* ═══ Constructors ═══ */
 
@@ -43,6 +44,15 @@ RizValue riz_instance_new(RizStructDef* def, RizValue* field_values) {
     inst->fields = RIZ_ALLOC_ARRAY(RizValue, def->field_count);
     for (int i = 0; i < def->field_count; i++) inst->fields[i] = field_values[i];
     RizValue r; r.type = VAL_INSTANCE; r.as.instance = inst; return r;
+}
+
+RizValue riz_vm_closure_val(RizVMClosure* cl) {
+    RizValue r;
+    r.type = VAL_VM_CLOSURE;
+    r.as.vm_closure = cl;
+    if (cl)
+        cl->ref_count = 1;
+    return r;
 }
 
 RizValue riz_native_ptr(void* ptr, const char* type_tag, RizPtrDestructor dtor) {
@@ -97,6 +107,9 @@ void riz_value_print(RizValue v) {
         case VAL_NATIVE_PTR:
             printf("<%s@%p>", v.as.native_ptr->type_tag, v.as.native_ptr->ptr);
             break;
+        case VAL_VM_CLOSURE:
+            printf("<vm %s>", v.as.vm_closure->name ? v.as.vm_closure->name : "fn");
+            break;
     }
 }
 
@@ -148,6 +161,11 @@ char* riz_value_to_string(RizValue v) {
             snprintf(nb, sizeof(nb), "<%s@%p>", v.as.native_ptr->type_tag, v.as.native_ptr->ptr);
             return riz_strdup(nb);
         }
+        case VAL_VM_CLOSURE: {
+            char nb[128];
+            snprintf(nb, sizeof(nb), "<vm %s>", v.as.vm_closure->name ? v.as.vm_closure->name : "fn");
+            return riz_strdup(nb);
+        }
     }
     return riz_strdup("?");
 }
@@ -179,7 +197,8 @@ const char* riz_value_type_name(RizValue v) {
     case VAL_STRUCT_DEF:return v.as.struct_def->name;
     case VAL_TRAIT_DEF:return v.as.trait_def->name;
     case VAL_INSTANCE:return v.as.instance->def->name;
-    case VAL_NATIVE_PTR:return v.as.native_ptr->type_tag;}
+    case VAL_NATIVE_PTR:return v.as.native_ptr->type_tag;
+    case VAL_VM_CLOSURE:return"function";}
     return"unknown";
 }
 
@@ -191,6 +210,7 @@ RizValue riz_value_copy(RizValue v) {
     if(v.type==VAL_DICT){v.as.dict->ref_count++;return v;}
     if(v.type==VAL_INSTANCE){v.as.instance->ref_count++;return v;}
     if(v.type==VAL_NATIVE_PTR){v.as.native_ptr->ref_count++;return v;}
+    if(v.type==VAL_VM_CLOSURE && v.as.vm_closure){ v.as.vm_closure->ref_count++; return v;}
     return v;
 }
 
@@ -220,6 +240,56 @@ void riz_value_free(RizValue* v) {
                 free(v->as.native_ptr);
             }
             v->as.native_ptr = NULL;
+            break;
+        }
+        case VAL_VM_CLOSURE: {
+            RizVMClosure* cl = v->as.vm_closure;
+            if (cl && --cl->ref_count <= 0) {
+                chunk_free(cl->chunk);
+                free(cl->chunk);
+                free(cl->name);
+                free(cl);
+            }
+            v->as.vm_closure = NULL;
+            break;
+        }
+        case VAL_FUNCTION: {
+            RizFunction* f = v->as.function;
+            if (f) {
+                free(f->name);
+                for (int i = 0; i < f->param_count; i++)
+                    free(f->params[i]);
+                free(f->params);
+                /* body, param_defaults: owned by program_ast; closure: borrowed chain */
+                free(f);
+            }
+            v->as.function = NULL;
+            break;
+        }
+        case VAL_STRUCT_DEF: {
+            RizStructDef* d = v->as.struct_def;
+            if (d) {
+                free(d->name);
+                for (int i = 0; i < d->field_count; i++)
+                    free(d->field_names[i]);
+                free(d->field_names);
+                for (int i = 0; i < d->method_count; i++) {
+                    free(d->method_names[i]);
+                    riz_value_free(&d->method_values[i]);
+                }
+                free(d->method_names);
+                free(d->method_values);
+                free(d);
+            }
+            v->as.struct_def = NULL;
+            break;
+        }
+        case VAL_NATIVE_FN: {
+            if (v->as.native) {
+                free(v->as.native->name);
+                free(v->as.native);
+            }
+            v->as.native = NULL;
             break;
         }
         default:break;
