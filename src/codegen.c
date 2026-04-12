@@ -311,6 +311,19 @@ static const char* emit_expr(ASTNode* node) {
                 char* b = get_temp_buf();
                 snprintf(b, 511, "_t%d", t);
                 return b;
+            } else if (node->as.call.callee->type == NODE_MEMBER) {
+                const char* obj = emit_expr_box(node->as.call.callee->as.member.object);
+                char obj_buf[256]; strncpy(obj_buf, obj, 255); obj_buf[255] = '\0';
+                const char* method = node->as.call.callee->as.member.member;
+                int t = new_tmp();
+                ind(); fprintf(G.out, "RizValue _args%d[] = {", t);
+                for (int i = 0; i < argc; i++) fprintf(G.out, "%s%s", (i > 0) ? ", " : "", arg_names[i]);
+                fprintf(G.out, "%s};\n", argc==0 ? "riz_none()":"");
+                ind(); fprintf(G.out, "RizValue _t%d = aot_method_call(%s, \"%s\", %d, _args%d);\n", t, obj_buf, method, argc, t);
+                last_expr_type = AOT_DYN;
+                char* b = get_temp_buf();
+                snprintf(b, 511, "_t%d", t);
+                return b;
             }
             last_expr_type = AOT_DYN;
             return "riz_none()";
@@ -384,6 +397,54 @@ static const char* emit_expr(ASTNode* node) {
             const char* left = emit_expr_box(node->as.pipe.left);
             last_expr_type = AOT_DYN;
             return left;
+        }
+        case NODE_TERNARY: {
+            const char* cond = emit_expr_box(node->as.ternary.condition);
+            char c_buf[256]; strncpy(c_buf, cond, 255); c_buf[255] = '\0';
+            int t = new_tmp();
+            ind(); fprintf(G.out, "RizValue _t%d;\n", t);
+            ind(); fprintf(G.out, "if (riz_value_is_truthy(%s)) {\n", c_buf); G.indent++;
+            const char* tv = emit_expr_box(node->as.ternary.true_expr);
+            ind(); fprintf(G.out, "_t%d = %s;\n", t, tv);
+            G.indent--; ind(); fprintf(G.out, "} else {\n"); G.indent++;
+            const char* fv = emit_expr_box(node->as.ternary.false_expr);
+            ind(); fprintf(G.out, "_t%d = %s;\n", t, fv);
+            G.indent--; ind(); fprintf(G.out, "}\n");
+            last_expr_type = AOT_DYN;
+            char* b = get_temp_buf(); snprintf(b, 511, "_t%d", t); return b;
+        }
+        case NODE_LIST_COMP: {
+            const char* iter = emit_expr_box(node->as.list_comp.iterable);
+            char iter_buf[256]; strncpy(iter_buf, iter, 255); iter_buf[255] = '\0';
+            int t = new_tmp();
+            ind(); fprintf(G.out, "RizValue _lc%d = %s;\n", t, iter_buf);
+            int r = new_tmp();
+            ind(); fprintf(G.out, "RizValue _t%d = riz_list_new();\n", r);
+            ind(); fprintf(G.out, "if (_lc%d.type == VAL_LIST) {\n", t); G.indent++;
+            ind(); fprintf(G.out, "for (int _i%d = 0; _i%d < _lc%d.as.list->count; _i%d++) {\n", t, t, t, t); G.indent++;
+            ind(); fprintf(G.out, "RizValue %s = _lc%d.as.list->items[_i%d];\n", node->as.list_comp.var_name, t, t);
+            if (node->as.list_comp.condition) {
+                const char* cv = emit_expr_box(node->as.list_comp.condition);
+                ind(); fprintf(G.out, "if (riz_value_is_truthy(%s)) {\n", cv); G.indent++;
+            }
+            const char* ev = emit_expr_box(node->as.list_comp.expr);
+            ind(); fprintf(G.out, "riz_list_append(_t%d.as.list, %s);\n", r, ev);
+            if (node->as.list_comp.condition) { G.indent--; ind(); fprintf(G.out, "}\n"); }
+            G.indent--; ind(); fprintf(G.out, "}\n");
+            G.indent--; ind(); fprintf(G.out, "}\n");
+            last_expr_type = AOT_DYN;
+            char* b = get_temp_buf(); snprintf(b, 511, "_t%d", r); return b;
+        }
+        case NODE_SLICE: {
+            const char* obj = emit_expr_box(node->as.slice.object);
+            char o_buf[256]; strncpy(o_buf, obj, 255); o_buf[255] = '\0';
+            char s_buf[256]; if (node->as.slice.start) { strncpy(s_buf, emit_expr_box(node->as.slice.start), 255); s_buf[255] = '\0'; } else strcpy(s_buf, "riz_none()");
+            char e_buf[256]; if (node->as.slice.end) { strncpy(e_buf, emit_expr_box(node->as.slice.end), 255); e_buf[255] = '\0'; } else strcpy(e_buf, "riz_none()");
+            char st_buf[256]; if (node->as.slice.step) { strncpy(st_buf, emit_expr_box(node->as.slice.step), 255); st_buf[255] = '\0'; } else strcpy(st_buf, "riz_none()");
+            int t = new_tmp();
+            ind(); fprintf(G.out, "RizValue _t%d = aot_slice_call(%s, %s, %s, %s);\n", t, o_buf, s_buf, e_buf, st_buf);
+            last_expr_type = AOT_DYN;
+            char* b = get_temp_buf(); snprintf(b, 511, "_t%d", t); return b;
         }
         case NODE_MATCH_EXPR:
         case NODE_LAMBDA:

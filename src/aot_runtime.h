@@ -171,5 +171,69 @@ static inline RizValue aot_member_get(RizValue obj, const char* member) {
 static inline void aot_member_set(RizValue obj, const char* member, RizValue val) {
     fprintf(stderr, "[AOT] Warning: Dynamic member set '%s' not fully integrated in runtime\n", member);
 }
+struct Interpreter;
+extern RizValue string_method(struct Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc);
+extern RizValue list_method(struct Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc);
+extern RizValue dict_method(struct Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc);
 
+static inline RizValue aot_slice_call(RizValue obj, RizValue start_val, RizValue end_val, RizValue step_val) {
+    int start = 0, end = 0, step = 1;
+    if (step_val.type == VAL_INT) step = step_val.as.integer;
+    if (step == 0) return riz_none();
+    
+    if (obj.type == VAL_LIST) {
+        RizList* list = obj.as.list;
+        end = list->count;
+        if (start_val.type == VAL_INT) start = start_val.as.integer; else if (step < 0) start = list->count - 1;
+        if (end_val.type == VAL_INT) end = end_val.as.integer; else if (step < 0) end = -1;
+        
+        if (start < 0 && start_val.type == VAL_INT) start += list->count;
+        if (end < 0 && end_val.type == VAL_INT) end += list->count;
+        if (start < 0) start = -1;
+        if (start > list->count) start = list->count;
+        if (end < -1) end = -1;
+        if (end > list->count) end = list->count;
+        
+        RizValue result = riz_list_new();
+        if (step > 0) {
+            for (int i = start; i < end; i += step) riz_list_append(result.as.list, riz_value_copy(list->items[i]));
+        } else {
+            for (int i = start; i > end; i += step) riz_list_append(result.as.list, riz_value_copy(list->items[i]));
+        }
+        return result;
+    }
+    if (obj.type == VAL_STRING) {
+        const char* str = obj.as.string;
+        int len = strlen(str);
+        end = len;
+        if (start_val.type == VAL_INT) start = start_val.as.integer; else if (step < 0) start = len - 1;
+        if (end_val.type == VAL_INT) end = end_val.as.integer; else if (step < 0) end = -1;
+        
+        if (start < 0 && start_val.type == VAL_INT) start += len;
+        if (end < 0 && end_val.type == VAL_INT) end += len;
+        if (start < 0) start = -1;
+        if (start > len) start = len;
+        if (end < -1) end = -1;
+        if (end > len) end = len;
+        
+        char* buf = (char*)malloc(len + 1);
+        int j = 0;
+        if (step > 0) {
+            for (int i = start; i < end && i >= 0 && i < len; i += step) buf[j++] = str[i];
+        } else {
+            for (int i = start; i > end && i >= 0 && i < len; i += step) buf[j++] = str[i];
+        }
+        buf[j] = '\0';
+        return riz_string_take(buf);
+    }
+    return riz_none();
+}
+
+static inline RizValue aot_method_call(RizValue obj, const char* method, int argc, RizValue* args) {
+    if (obj.type == VAL_STRING) return string_method(NULL, obj, method, args, argc);
+    if (obj.type == VAL_LIST) return list_method(NULL, obj, method, args, argc);
+    if (obj.type == VAL_DICT) return dict_method(NULL, obj, method, args, argc);
+    fprintf(stderr, "[AOT] Warning: Dynamic method call '%s' not fully integrated\n", method);
+    return riz_none();
+}
 #endif

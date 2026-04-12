@@ -35,7 +35,13 @@ static Token consume(Parser* P, TokenType type, const char* msg) {
 static char* token_text(Token t) { return riz_strndup(t.start, t.length); }
 
 static char* parse_string_literal(Token t) {
-    const char* s = t.start + 1; int raw = t.length - 2;
+    int offset = 1;  /* skip opening " */
+    int trim_end = 2; /* skip opening " and closing " */
+    /* Detect triple-quoted string: starts with """ */
+    if (t.length >= 6 && t.start[0] == '"' && t.start[1] == '"' && t.start[2] == '"') {
+        offset = 3; trim_end = 6;
+    }
+    const char* s = t.start + offset; int raw = t.length - trim_end;
     char* r = (char*)malloc(raw + 1); int j = 0;
     for (int i = 0; i < raw; i++) {
         if (s[i] == '\\' && i+1 < raw) {
@@ -141,6 +147,72 @@ static ASTNode* parse_dict_literal(Parser* P) {
     return ast_dict_lit(keys, values, count, line);
 }
 
+/* ═══ F-string to format() AST helper ═══ */
+
+static ASTNode* parse_fstring(Parser* P, Token fstr_tok) {
+    /* f"Hello {expr} world {expr2}" -> format("Hello {} world {}", expr, expr2) */
+    /* Token starts with f" and ends with ", so skip 2 chars from start, 1 from end */
+    const char* s = fstr_tok.start + 2; int raw_len = fstr_tok.length - 3;
+    /* Process escape sequences like regular strings */
+    char* raw = (char*)malloc(raw_len + 1); int rj = 0;
+    for (int i = 0; i < raw_len; i++) {
+        if (s[i] == '\\' && i+1 < raw_len) {
+            i++;
+            switch(s[i]) {
+                case 'n': raw[rj++]='\n'; break; case 't': raw[rj++]='\t'; break;
+                case 'r': raw[rj++]='\r'; break; case '\\': raw[rj++]='\\'; break;
+                case '"': raw[rj++]='"'; break;  case '0': raw[rj++]='\0'; break;
+                default: raw[rj++]='\\'; raw[rj++]=s[i]; break;
+            }
+        } else raw[rj++] = s[i];
+    }
+    raw[rj] = '\0';
+    int line = fstr_tok.line;
+    /* Build template and extract expressions */
+    size_t rlen = strlen(raw);
+    char* tmpl = (char*)malloc(rlen + 1);
+    int tmpl_len = 0;
+    int cap = 4, argc = 1; /* first arg is the template string */
+    ASTNode** args = RIZ_ALLOC_ARRAY(ASTNode*, cap);
+    for (size_t i = 0; i < rlen; i++) {
+        if (raw[i] == '{' && i + 1 < rlen && raw[i+1] != '{') {
+            /* Found interpolation: extract inner expression text */
+            tmpl[tmpl_len++] = '{'; tmpl[tmpl_len++] = '}';
+            i++; /* skip '{' */
+            size_t start = i;
+            int depth = 1;
+            while (i < rlen && depth > 0) {
+                if (raw[i] == '{') depth++;
+                else if (raw[i] == '}') depth--;
+                if (depth > 0) i++;
+            }
+            /* raw[start..i) is the expression text */
+            size_t expr_len = i - start;
+            char* expr_src = (char*)malloc(expr_len + 1);
+            memcpy(expr_src, raw + start, expr_len);
+            expr_src[expr_len] = '\0';
+            /* Parse the expression */
+            Lexer expr_lex; lexer_init(&expr_lex, expr_src);
+            Parser expr_P; parser_init(&expr_P, &expr_lex);
+            ASTNode* expr = parser_parse_expression(&expr_P);
+            free(expr_src);
+            if (argc >= cap) { cap *= 2; args = RIZ_GROW_ARRAY(ASTNode*, args, argc, cap); }
+            args[argc++] = expr;
+        } else if (raw[i] == '{' && i + 1 < rlen && raw[i+1] == '{') {
+            tmpl[tmpl_len++] = '{'; i++; /* escaped {{ -> { */
+        } else if (raw[i] == '}' && i + 1 < rlen && raw[i+1] == '}') {
+            tmpl[tmpl_len++] = '}'; i++; /* escaped }} -> } */
+        } else {
+            tmpl[tmpl_len++] = raw[i];
+        }
+    }
+    tmpl[tmpl_len] = '\0';
+    args[0] = ast_string_lit(tmpl, line);
+    free(tmpl); free(raw);
+    ASTNode* callee = ast_identifier("format", line);
+    return ast_call(callee, args, argc, line);
+}
+
 /* ═══ Primary ═══ */
 
 static ASTNode* parse_primary(Parser* P) {
@@ -148,15 +220,32 @@ static ASTNode* parse_primary(Parser* P) {
     if (match(P, TOK_INT)) { char*t=token_text(P->previous); int64_t v=strtoll(t,NULL,10);free(t); return ast_int_lit(v,line); }
     if (match(P, TOK_FLOAT)) { char*t=token_text(P->previous); double v=strtod(t,NULL);free(t); return ast_float_lit(v,line); }
     if (match(P, TOK_STRING)) { char*v=parse_string_literal(P->previous); ASTNode*n=ast_string_lit(v,line);free(v); return n; }
+    if (match(P, TOK_FSTRING)) { return parse_fstring(P, P->previous); }
     if (match(P, TOK_TRUE))  return ast_bool_lit(true, line);
     if (match(P, TOK_FALSE)) return ast_bool_lit(false, line);
     if (match(P, TOK_NONE))  return ast_none_lit(line);
     if (match(P, TOK_IDENTIFIER)) { char*name=token_text(P->previous); ASTNode*n=ast_identifier(name,line);free(name); return n; }
     if (match(P, TOK_LPAREN)) { ASTNode*expr=parse_expression(P); consume(P,TOK_RPAREN,"Expected ')'"); return expr; }
-    /* List literal */
+    /* List literal or list comprehension */
     if (match(P, TOK_LBRACKET)) {
-        int cap=8,cnt=0; ASTNode** items=RIZ_ALLOC_ARRAY(ASTNode*,cap);
-        if(!check(P,TOK_RBRACKET)){do{if(cnt>=cap){cap*=2;items=RIZ_GROW_ARRAY(ASTNode*,items,cnt,cap);}items[cnt++]=parse_expression(P);}while(match(P,TOK_COMMA));}
+        if (check(P, TOK_RBRACKET)) { consume(P, TOK_RBRACKET, "Expected ']'"); return ast_list_lit(NULL, 0, line); }
+        /* Parse first expression, then check if 'for' follows → list comprehension */
+        ASTNode* first = parse_or(P);
+        if (check(P, TOK_FOR)) {
+            /* List comprehension: [expr for var in iter] or [expr for var in iter if cond] */
+            consume(P, TOK_FOR, "Expected 'for'");
+            Token vt = consume(P, TOK_IDENTIFIER, "Expected variable name"); char* vn = token_text(vt);
+            consume(P, TOK_IN, "Expected 'in'");
+            ASTNode* iter = parse_or(P);
+            ASTNode* cond = NULL;
+            if (match(P, TOK_IF)) cond = parse_or(P);
+            consume(P, TOK_RBRACKET, "Expected ']'");
+            ASTNode* n = ast_list_comp(first, vn, iter, cond, line);
+            free(vn); return n;
+        }
+        /* Regular list literal */
+        int cap=8,cnt=1; ASTNode** items=RIZ_ALLOC_ARRAY(ASTNode*,cap); items[0]=first;
+        while(match(P,TOK_COMMA)){if(check(P,TOK_RBRACKET))break;if(cnt>=cap){cap*=2;items=RIZ_GROW_ARRAY(ASTNode*,items,cnt,cap);}items[cnt++]=parse_expression(P);}
         consume(P,TOK_RBRACKET,"Expected ']'"); return ast_list_lit(items,cnt,line);
     }
     /* Dict literal — peek-ahead disambiguation */
@@ -204,7 +293,24 @@ static ASTNode* parse_call(Parser* P) {
             }
             consume(P,TOK_RPAREN,"Expected ')'"); expr=ast_call(expr,args,cnt,line);
         } else if (match(P, TOK_LBRACKET)) {
-            ASTNode*idx=parse_expression(P); consume(P,TOK_RBRACKET,"Expected ']'"); expr=ast_index(expr,idx,line);
+            /* Check for slice syntax: obj[start:end] or obj[start:end:step] */
+            ASTNode* start_e = NULL;
+            if (!check(P, TOK_COLON)) start_e = parse_expression(P);
+            if (check(P, TOK_COLON)) {
+                advance_parser(P); /* consume first ':' */
+                ASTNode* end_e = NULL;
+                if (!check(P, TOK_COLON) && !check(P, TOK_RBRACKET)) end_e = parse_expression(P);
+                ASTNode* step_e = NULL;
+                if (check(P, TOK_COLON)) {
+                    advance_parser(P); /* consume second ':' */
+                    if (!check(P, TOK_RBRACKET)) step_e = parse_expression(P);
+                }
+                consume(P, TOK_RBRACKET, "Expected ']' after slice");
+                expr = ast_slice(expr, start_e, end_e, step_e, line);
+            } else {
+                consume(P, TOK_RBRACKET, "Expected ']'");
+                expr = ast_index(expr, start_e, line);
+            }
         } else if (match(P, TOK_DOT)) {
             char* m;
             if (check(P, TOK_IMPORT)) {
@@ -272,6 +378,14 @@ static ASTNode* parse_or(Parser* P) {
 static ASTNode* parse_pipe(Parser* P) {
     ASTNode*left=parse_or(P); int line=P->previous.line;
     while(match(P,TOK_PIPE)) left=ast_pipe(left,parse_or(P),line);
+    /* Ternary: value if condition else other */
+    if (check(P, TOK_IF)) {
+        advance_parser(P); /* consume 'if' */
+        ASTNode* cond = parse_or(P);
+        consume(P, TOK_ELSE, "Expected 'else' in ternary expression");
+        ASTNode* false_expr = parse_pipe(P); /* right-recursive */
+        return ast_ternary(left, cond, false_expr, line);
+    }
     return left;
 }
 static ASTNode* parse_assignment(Parser* P) {
@@ -355,7 +469,9 @@ static ASTNode* parse_for_stmt(Parser* P) {
     consume(P,TOK_IN,"Expected 'in'");
     ASTNode*iter=parse_expression(P);
     ASTNode*body=parse_block(P);
-    ASTNode*n=ast_for_stmt(vn,iter,body,line); free(vn); return n;
+    ASTNode*else_b=NULL;
+    if(match(P,TOK_ELSE)) else_b=parse_block(P);
+    ASTNode*n=ast_for_stmt(vn,iter,body,else_b,line); free(vn); return n;
 }
 
 static ASTNode* parse_return_stmt(Parser* P) {

@@ -139,12 +139,12 @@ RizValue native_sum(RizValue* a, int c) {
 }
 
 /* Phase 2 native map/filter — forward declared */
-static RizValue native_map(RizValue* a, int c);
-static RizValue native_filter(RizValue* a, int c);
+RizValue native_map(RizValue* a, int c);
+RizValue native_filter(RizValue* a, int c);
 
 /* Phase 2 new builtins */
 
-static RizValue native_format(RizValue* args, int argc) {
+RizValue native_format(RizValue* args, int argc) {
     if (argc<1||args[0].type!=VAL_STRING) { riz_runtime_error("format() first arg must be string"); return riz_none(); }
     const char* tmpl = args[0].as.string;
     size_t cap=256; char* res=(char*)malloc(cap); size_t len=0;
@@ -165,7 +165,7 @@ static RizValue native_format(RizValue* args, int argc) {
     res[len]='\0'; return riz_string_take(res);
 }
 
-static RizValue native_sorted(RizValue* args, int argc) {
+RizValue native_sorted(RizValue* args, int argc) {
     if (argc!=1||args[0].type!=VAL_LIST) { riz_runtime_error("sorted() takes 1 list arg"); return riz_none(); }
     RizList* src = args[0].as.list;
     RizValue result = riz_list_new();
@@ -185,7 +185,7 @@ static RizValue native_sorted(RizValue* args, int argc) {
     return result;
 }
 
-static RizValue native_reversed(RizValue* args, int argc) {
+RizValue native_reversed(RizValue* args, int argc) {
     if (argc!=1||args[0].type!=VAL_LIST) return riz_none();
     RizList* src = args[0].as.list;
     RizValue result = riz_list_new();
@@ -193,7 +193,7 @@ static RizValue native_reversed(RizValue* args, int argc) {
     return result;
 }
 
-static RizValue native_enumerate(RizValue* args, int argc) {
+RizValue native_enumerate(RizValue* args, int argc) {
     if (argc!=1||args[0].type!=VAL_LIST) return riz_none();
     RizList* src=args[0].as.list;
     RizValue result = riz_list_new();
@@ -206,7 +206,7 @@ static RizValue native_enumerate(RizValue* args, int argc) {
     return result;
 }
 
-static RizValue native_zip(RizValue* args, int argc) {
+RizValue native_zip(RizValue* args, int argc) {
     if (argc!=2||args[0].type!=VAL_LIST||args[1].type!=VAL_LIST) return riz_none();
     RizList*a=args[0].as.list; RizList*b=args[1].as.list;
     int cnt = a->count<b->count ? a->count : b->count;
@@ -220,16 +220,16 @@ static RizValue native_zip(RizValue* args, int argc) {
     return result;
 }
 
-static RizValue native_keys(RizValue* a, int c) {
+RizValue native_keys(RizValue* a, int c) {
     if (c!=1||a[0].type!=VAL_DICT){riz_runtime_error("keys() takes 1 dict arg");return riz_none();}
     return riz_dict_keys(a[0].as.dict);
 }
-static RizValue native_values(RizValue* a, int c) {
+RizValue native_values(RizValue* a, int c) {
     if (c!=1||a[0].type!=VAL_DICT){riz_runtime_error("values() takes 1 dict arg");return riz_none();}
     return riz_dict_values(a[0].as.dict);
 }
 
-static RizValue native_assert(RizValue* args, int argc) {
+RizValue native_assert(RizValue* args, int argc) {
     if (argc<1) { riz_runtime_error("assert() requires at least 1 argument"); return riz_none(); }
     if (!riz_value_is_truthy(args[0])) {
         if (argc>=2 && args[1].type==VAL_STRING)
@@ -270,14 +270,14 @@ RizValue native_panic(RizValue* args, int argc) {
     return riz_none();
 }
 
-static RizValue native_exit(RizValue* args, int argc) {
+RizValue native_exit(RizValue* args, int argc) {
     int code = 0; if (argc == 1 && args[0].type == VAL_INT) code = args[0].as.integer;
     exit(code);
     return riz_none();
 }
 
 /* Phase 4: File I/O */
-static RizValue native_read_file(RizValue* args, int argc) {
+RizValue native_read_file(RizValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_STRING) { riz_runtime_error("read_file requires 1 string argument (path)"); return riz_none(); }
     FILE* f = fopen(args[0].as.string, "rb");
     if (!f) return riz_none();
@@ -291,7 +291,7 @@ static RizValue native_read_file(RizValue* args, int argc) {
     return riz_string_take(string);
 }
 
-static RizValue native_write_file(RizValue* args, int argc) {
+RizValue native_write_file(RizValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_STRING || args[1].type != VAL_STRING) { riz_runtime_error("write_file requires (path: str, content: str)"); return riz_none(); }
     FILE* f = fopen(args[0].as.string, "wb");
     if (!f) return riz_bool(false);
@@ -301,7 +301,7 @@ static RizValue native_write_file(RizValue* args, int argc) {
     return riz_bool(true);
 }
 
-static RizValue native_has_key(RizValue* args, int argc) {
+RizValue native_has_key(RizValue* args, int argc) {
     if (argc!=2||args[0].type!=VAL_DICT||args[1].type!=VAL_STRING) return riz_bool(false);
     return riz_bool(riz_dict_has(args[0].as.dict, args[1].as.string));
 }
@@ -412,7 +412,7 @@ RizValue native_extend(RizValue* args, int argc) {
  *  Method dispatch for built-in types
  * ═══════════════════════════════════════════════════════ */
 
-static RizValue string_method(Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc) {
+RizValue string_method(Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc) {
     (void)I;
     const char* s = obj.as.string;
     size_t slen = strlen(s);
@@ -498,7 +498,7 @@ static RizValue string_method(Interpreter* I, RizValue obj, const char* method, 
     return riz_none();
 }
 
-static RizValue list_method(Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc) {
+RizValue list_method(Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc) {
     RizList* list = obj.as.list;
 
     if (strcmp(method,"push")==0 && argc==1) {
@@ -579,7 +579,7 @@ static RizValue list_method(Interpreter* I, RizValue obj, const char* method, Ri
     return riz_none();
 }
 
-static RizValue dict_method(Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc) {
+RizValue dict_method(Interpreter* I, RizValue obj, const char* method, RizValue* args, int argc) {
     (void)I;
     RizDict* d = obj.as.dict;
 
@@ -1058,7 +1058,7 @@ static RizValue call_function(Interpreter* I, RizFunction* fn, RizValue* args, i
 }
 
 /* map/filter native functions (need call_function) */
-static RizValue native_map(RizValue* a, int c) {
+RizValue native_map(RizValue* a, int c) {
     if (c!=2||a[0].type!=VAL_LIST) { riz_runtime_error("map(list,fn) expected"); return riz_none(); }
     RizList*src=a[0].as.list; RizValue fn_val=a[1]; RizValue result=riz_list_new();
     for(int i=0;i<src->count;i++){RizValue item=src->items[i];RizValue mapped;
@@ -1068,7 +1068,7 @@ static RizValue native_map(RizValue* a, int c) {
         riz_list_append(result.as.list,mapped);}
     return result;
 }
-static RizValue native_filter(RizValue* a, int c) {
+RizValue native_filter(RizValue* a, int c) {
     if (c!=2||a[0].type!=VAL_LIST) { riz_runtime_error("filter(list,fn) expected"); return riz_none(); }
     RizList*src=a[0].as.list; RizValue fn_val=a[1]; RizValue result=riz_list_new();
     for(int i=0;i<src->count;i++){RizValue item=src->items[i];RizValue keep;
@@ -1402,6 +1402,75 @@ static RizValue eval(Interpreter* I, ASTNode* node) {
         case NODE_PIPE:       return eval_pipe(I, node);
         case NODE_MATCH_EXPR: return eval_match(I, node);
 
+        /* Ternary: value if condition else other */
+        case NODE_TERNARY: {
+            RizValue cond = eval(I, node->as.ternary.condition);
+            if (riz_value_is_truthy(cond)) return eval(I, node->as.ternary.true_expr);
+            else return eval(I, node->as.ternary.false_expr);
+        }
+
+        /* List comprehension: [expr for var in iter if cond] */
+        case NODE_LIST_COMP: {
+            RizValue iterable = eval(I, node->as.list_comp.iterable);
+            if (iterable.type != VAL_LIST) {
+                riz_runtime_error("Cannot iterate over %s in list comprehension", riz_value_type_name(iterable));
+                return riz_none();
+            }
+            RizValue result = riz_list_new();
+            RizList* list = iterable.as.list;
+            for (int i = 0; i < list->count; i++) {
+                Environment* le = env_new(I->current_env);
+                Environment* saved = I->current_env;
+                I->current_env = le;
+                env_define(le, node->as.list_comp.var_name, riz_value_copy(list->items[i]), false);
+                bool include = true;
+                if (node->as.list_comp.condition) {
+                    RizValue cv = eval(I, node->as.list_comp.condition);
+                    include = riz_value_is_truthy(cv);
+                }
+                if (include) {
+                    RizValue v = eval(I, node->as.list_comp.expr);
+                    riz_list_append(result.as.list, v);
+                }
+                I->current_env = saved;
+            }
+            return result;
+        }
+
+        /* Slice: obj[start:end:step] */
+        case NODE_SLICE: {
+            RizValue obj = eval(I, node->as.slice.object);
+            if (obj.type == VAL_LIST) {
+                int count = obj.as.list->count;
+                int start = 0, end = count, step = 1;
+                if (node->as.slice.start) { RizValue sv = eval(I, node->as.slice.start); if (sv.type==VAL_INT) { start=(int)sv.as.integer; if(start<0)start+=count; } }
+                if (node->as.slice.end)   { RizValue ev = eval(I, node->as.slice.end);   if (ev.type==VAL_INT) { end=(int)ev.as.integer; if(end<0)end+=count; } }
+                if (node->as.slice.step)  { RizValue tv = eval(I, node->as.slice.step);  if (tv.type==VAL_INT) step=(int)tv.as.integer; }
+                if (step == 0) { riz_runtime_error("Slice step cannot be zero"); return riz_none(); }
+                if (start < 0) start = 0; if (end > count) end = count;
+                RizValue result = riz_list_new();
+                if (step > 0) { for (int i = start; i < end; i += step) riz_list_append(result.as.list, riz_value_copy(obj.as.list->items[i])); }
+                else { for (int i = (end > 0 ? end - 1 : count - 1); i >= start; i += step) riz_list_append(result.as.list, riz_value_copy(obj.as.list->items[i])); }
+                return result;
+            }
+            if (obj.type == VAL_STRING) {
+                int slen = (int)strlen(obj.as.string);
+                int start = 0, end = slen, step = 1;
+                if (node->as.slice.start) { RizValue sv = eval(I, node->as.slice.start); if (sv.type==VAL_INT) { start=(int)sv.as.integer; if(start<0)start+=slen; } }
+                if (node->as.slice.end)   { RizValue ev = eval(I, node->as.slice.end);   if (ev.type==VAL_INT) { end=(int)ev.as.integer; if(end<0)end+=slen; } }
+                if (node->as.slice.step)  { RizValue tv = eval(I, node->as.slice.step);  if (tv.type==VAL_INT) step=(int)tv.as.integer; }
+                if (step == 0) { riz_runtime_error("Slice step cannot be zero"); return riz_none(); }
+                if (start < 0) start = 0; if (end > slen) end = slen;
+                size_t cap = (size_t)(end - start + 1); char* buf = (char*)malloc(cap + 1); int len = 0;
+                if (step > 0) { for (int i = start; i < end; i += step) buf[len++] = obj.as.string[i]; }
+                else { for (int i = (end > 0 ? end - 1 : slen - 1); i >= start; i += step) buf[len++] = obj.as.string[i]; }
+                buf[len] = '\0';
+                return riz_string_take(buf);
+            }
+            riz_runtime_error("Cannot slice %s", riz_value_type_name(obj));
+            return riz_none();
+        }
+
         case NODE_INDEX: {
             RizValue obj = eval(I, node->as.index_expr.object);
             RizValue idx = eval(I, node->as.index_expr.index);
@@ -1536,6 +1605,7 @@ static RizValue eval(Interpreter* I, ASTNode* node) {
             RizValue iterable = eval(I, node->as.for_stmt.iterable);
             if(iterable.type!=VAL_LIST){riz_runtime_error("Cannot iterate over %s",riz_value_type_name(iterable));return riz_none();}
             RizList* list = iterable.as.list;
+            bool did_break = false;
             for(int i=0;i<list->count;i++){
                 Environment* le=env_new(I->current_env); Environment* saved=I->current_env; I->current_env=le;
                 env_define(le,node->as.for_stmt.var_name,riz_value_copy(list->items[i]),false);
@@ -1544,9 +1614,13 @@ static RizValue eval(Interpreter* I, ASTNode* node) {
                     for(int j=0;j<b->as.block.count;j++){eval(I,b->as.block.statements[j]);if(I->signal!=SIG_NONE)break;}
                 } else eval(I,node->as.for_stmt.body);
                 I->current_env=saved;
-                if(I->signal==SIG_BREAK){I->signal=SIG_NONE;break;}
+                if(I->signal==SIG_BREAK){I->signal=SIG_NONE;did_break=true;break;}
                 if(I->signal==SIG_CONTINUE){I->signal=SIG_NONE;continue;}
                 if(I->signal==SIG_RETURN)break;
+            }
+            /* for...else: else block runs if loop completed without break */
+            if (!did_break && I->signal == SIG_NONE && node->as.for_stmt.else_branch) {
+                exec_block(I, node->as.for_stmt.else_branch);
             }
             return riz_none();
         }

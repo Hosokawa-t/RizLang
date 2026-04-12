@@ -37,6 +37,15 @@ ASTNode* ast_member(ASTNode* object, const char* member, int line) { ASTNode* n=
 ASTNode* ast_pipe(ASTNode* left, ASTNode* right, int line) { ASTNode* n=new_node(NODE_PIPE,line); n->as.pipe.left=left; n->as.pipe.right=right; return n; }
 ASTNode* ast_lambda(char** params, int param_count, ASTNode* body, int line) { ASTNode* n=new_node(NODE_LAMBDA,line); n->as.lambda.params=params; n->as.lambda.param_count=param_count; n->as.lambda.body=body; return n; }
 ASTNode* ast_match_expr(ASTNode* subject, RizMatchArm* arms, int arm_count, int line) { ASTNode* n=new_node(NODE_MATCH_EXPR,line); n->as.match_expr.subject=subject; n->as.match_expr.arms=arms; n->as.match_expr.arm_count=arm_count; return n; }
+ASTNode* ast_ternary(ASTNode* true_expr, ASTNode* condition, ASTNode* false_expr, int line) {
+    ASTNode* n=new_node(NODE_TERNARY,line); n->as.ternary.true_expr=true_expr; n->as.ternary.condition=condition; n->as.ternary.false_expr=false_expr; return n;
+}
+ASTNode* ast_list_comp(ASTNode* expr, const char* var_name, ASTNode* iterable, ASTNode* cond, int line) {
+    ASTNode* n=new_node(NODE_LIST_COMP,line); n->as.list_comp.expr=expr; n->as.list_comp.var_name=riz_strdup(var_name); n->as.list_comp.iterable=iterable; n->as.list_comp.condition=cond; return n;
+}
+ASTNode* ast_slice(ASTNode* object, ASTNode* start, ASTNode* end, ASTNode* step, int line) {
+    ASTNode* n=new_node(NODE_SLICE,line); n->as.slice.object=object; n->as.slice.start=start; n->as.slice.end=end; n->as.slice.step=step; return n;
+}
 
 /* ═══ Statements ═══ */
 
@@ -53,7 +62,7 @@ ASTNode* ast_fn_decl(const char* name, char** params, int param_count, ASTNode**
 ASTNode* ast_return_stmt(ASTNode* value, int line) { ASTNode* n=new_node(NODE_RETURN_STMT,line); n->as.return_stmt.value=value; return n; }
 ASTNode* ast_if_stmt(ASTNode* cond, ASTNode* then_b, ASTNode* else_b, int line) { ASTNode* n=new_node(NODE_IF_STMT,line); n->as.if_stmt.condition=cond; n->as.if_stmt.then_branch=then_b; n->as.if_stmt.else_branch=else_b; return n; }
 ASTNode* ast_while_stmt(ASTNode* cond, ASTNode* body, int line) { ASTNode* n=new_node(NODE_WHILE_STMT,line); n->as.while_stmt.condition=cond; n->as.while_stmt.body=body; return n; }
-ASTNode* ast_for_stmt(const char* var_name, ASTNode* iterable, ASTNode* body, int line) { ASTNode* n=new_node(NODE_FOR_STMT,line); n->as.for_stmt.var_name=riz_strdup(var_name); n->as.for_stmt.iterable=iterable; n->as.for_stmt.body=body; return n; }
+ASTNode* ast_for_stmt(const char* var_name, ASTNode* iterable, ASTNode* body, ASTNode* else_b, int line) { ASTNode* n=new_node(NODE_FOR_STMT,line); n->as.for_stmt.var_name=riz_strdup(var_name); n->as.for_stmt.iterable=iterable; n->as.for_stmt.body=body; n->as.for_stmt.else_branch=else_b; return n; }
 ASTNode* ast_break_stmt(int line) { return new_node(NODE_BREAK_STMT, line); }
 ASTNode* ast_continue_stmt(int line) { return new_node(NODE_CONTINUE_STMT, line); }
 ASTNode* ast_block(ASTNode** stmts, int count, int line) { ASTNode* n=new_node(NODE_BLOCK,line); n->as.block.statements=stmts; n->as.block.count=count; return n; }
@@ -109,7 +118,10 @@ void ast_free(ASTNode* node) {
         case NODE_RETURN_STMT: ast_free(node->as.return_stmt.value); break;
         case NODE_IF_STMT: ast_free(node->as.if_stmt.condition);ast_free(node->as.if_stmt.then_branch);ast_free(node->as.if_stmt.else_branch); break;
         case NODE_WHILE_STMT: ast_free(node->as.while_stmt.condition);ast_free(node->as.while_stmt.body); break;
-        case NODE_FOR_STMT: free(node->as.for_stmt.var_name);ast_free(node->as.for_stmt.iterable);ast_free(node->as.for_stmt.body); break;
+        case NODE_FOR_STMT: free(node->as.for_stmt.var_name);ast_free(node->as.for_stmt.iterable);ast_free(node->as.for_stmt.body);ast_free(node->as.for_stmt.else_branch); break;
+        case NODE_TERNARY: ast_free(node->as.ternary.true_expr);ast_free(node->as.ternary.condition);ast_free(node->as.ternary.false_expr); break;
+        case NODE_LIST_COMP: ast_free(node->as.list_comp.expr);free(node->as.list_comp.var_name);ast_free(node->as.list_comp.iterable);ast_free(node->as.list_comp.condition); break;
+        case NODE_SLICE: ast_free(node->as.slice.object);ast_free(node->as.slice.start);ast_free(node->as.slice.end);ast_free(node->as.slice.step); break;
         case NODE_BLOCK: for(int i=0;i<node->as.block.count;i++)ast_free(node->as.block.statements[i]); free(node->as.block.statements); break;
         case NODE_IMPORT: free(node->as.import_stmt.path); break;
         case NODE_IMPORT_NATIVE: free(node->as.import_native.path); break;

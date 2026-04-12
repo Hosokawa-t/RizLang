@@ -165,6 +165,24 @@ extern RizValue native_chr(RizValue* a, int c);
 extern RizValue native_extend(RizValue* a, int c);
 extern RizValue native_debug(RizValue* a, int c);
 extern RizValue native_panic(RizValue* a, int c);
+extern RizValue native_print(RizValue* a, int c);
+extern RizValue native_input(RizValue* a, int c);
+extern RizValue native_append(RizValue* a, int c);
+extern RizValue native_pop(RizValue* a, int c);
+extern RizValue native_map(RizValue* a, int c);
+extern RizValue native_filter(RizValue* a, int c);
+extern RizValue native_format(RizValue* a, int c);
+extern RizValue native_sorted(RizValue* a, int c);
+extern RizValue native_reversed(RizValue* a, int c);
+extern RizValue native_enumerate(RizValue* a, int c);
+extern RizValue native_zip(RizValue* a, int c);
+extern RizValue native_keys(RizValue* a, int c);
+extern RizValue native_values(RizValue* a, int c);
+extern RizValue native_assert(RizValue* a, int c);
+extern RizValue native_exit(RizValue* a, int c);
+extern RizValue native_read_file(RizValue* a, int c);
+extern RizValue native_write_file(RizValue* a, int c);
+extern RizValue native_has_key(RizValue* a, int c);
 
 void aot_setup_builtins(void) {
     aot_register_user_fn("range", (NativeFnPtr)native_range, -1);
@@ -190,6 +208,24 @@ void aot_setup_builtins(void) {
     aot_register_user_fn("extend", (NativeFnPtr)native_extend, 2);
     aot_register_user_fn("debug", (NativeFnPtr)native_debug, -1);
     aot_register_user_fn("panic", (NativeFnPtr)native_panic, -1);
+    aot_register_user_fn("print", (NativeFnPtr)native_print, -1);
+    aot_register_user_fn("input", (NativeFnPtr)native_input, -1);
+    aot_register_user_fn("append", (NativeFnPtr)native_append, 2);
+    aot_register_user_fn("pop", (NativeFnPtr)native_pop, 1);
+    aot_register_user_fn("map", (NativeFnPtr)native_map, 2);
+    aot_register_user_fn("filter", (NativeFnPtr)native_filter, 2);
+    aot_register_user_fn("format", (NativeFnPtr)native_format, -1);
+    aot_register_user_fn("sorted", (NativeFnPtr)native_sorted, 1);
+    aot_register_user_fn("reversed", (NativeFnPtr)native_reversed, 1);
+    aot_register_user_fn("enumerate", (NativeFnPtr)native_enumerate, 1);
+    aot_register_user_fn("zip", (NativeFnPtr)native_zip, 2);
+    aot_register_user_fn("keys", (NativeFnPtr)native_keys, 1);
+    aot_register_user_fn("values", (NativeFnPtr)native_values, 1);
+    aot_register_user_fn("assert", (NativeFnPtr)native_assert, -1);
+    aot_register_user_fn("exit", (NativeFnPtr)native_exit, -1);
+    aot_register_user_fn("read_file", (NativeFnPtr)native_read_file, 1);
+    aot_register_user_fn("write_file", (NativeFnPtr)native_write_file, 2);
+    aot_register_user_fn("has_key", (NativeFnPtr)native_has_key, 2);
 }
 
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args) {

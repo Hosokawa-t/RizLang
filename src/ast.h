@@ -35,6 +35,9 @@ typedef enum {
     NODE_PIPE,
     NODE_LAMBDA,
     NODE_MATCH_EXPR,
+    NODE_TERNARY,         /* value if cond else other */
+    NODE_LIST_COMP,       /* [expr for var in iter if cond] */
+    NODE_SLICE,           /* obj[start:end] or obj[start:end:step] */
 
     /* Statements */
     NODE_EXPR_STMT,
@@ -168,6 +171,29 @@ struct ASTNode {
             int          arm_count;
         } match_expr;
 
+        /* NODE_TERNARY -- value if condition else alternative */
+        struct {
+            ASTNode* true_expr;
+            ASTNode* condition;
+            ASTNode* false_expr;
+        } ternary;
+
+        /* NODE_LIST_COMP -- [expr for var_name in iterable if cond] */
+        struct {
+            ASTNode* expr;
+            char*    var_name;
+            ASTNode* iterable;
+            ASTNode* condition;  /* NULL = no filter */
+        } list_comp;
+
+        /* NODE_SLICE -- obj[start:end:step] */
+        struct {
+            ASTNode* object;
+            ASTNode* start;   /* NULL = 0 */
+            ASTNode* end;     /* NULL = len */
+            ASTNode* step;    /* NULL = 1 */
+        } slice;
+
         /* NODE_EXPR_STMT */
         struct {
             ASTNode* expr;
@@ -214,6 +240,7 @@ struct ASTNode {
             char*    var_name;
             ASTNode* iterable;
             ASTNode* body;
+            ASTNode* else_branch;  /* NULL or block (for...else) */
         } for_stmt;
 
         /* NODE_BLOCK */
@@ -314,13 +341,16 @@ ASTNode* ast_member(ASTNode* object, const char* member, int line);
 ASTNode* ast_pipe(ASTNode* left, ASTNode* right, int line);
 ASTNode* ast_lambda(char** params, int param_count, ASTNode* body, int line);
 ASTNode* ast_match_expr(ASTNode* subject, RizMatchArm* arms, int arm_count, int line);
+ASTNode* ast_ternary(ASTNode* true_expr, ASTNode* condition, ASTNode* false_expr, int line);
+ASTNode* ast_list_comp(ASTNode* expr, const char* var_name, ASTNode* iterable, ASTNode* cond, int line);
+ASTNode* ast_slice(ASTNode* object, ASTNode* start, ASTNode* end, ASTNode* step, int line);
 ASTNode* ast_expr_stmt(ASTNode* expr, int line);
 ASTNode* ast_let_decl(const char* name, const char* type_ann, ASTNode* init, bool mutable, int line);
 ASTNode* ast_fn_decl(const char* name, char** params, int param_count, ASTNode** defaults, const char* ret_type, ASTNode* body, int line);
 ASTNode* ast_return_stmt(ASTNode* value, int line);
 ASTNode* ast_if_stmt(ASTNode* cond, ASTNode* then_b, ASTNode* else_b, int line);
 ASTNode* ast_while_stmt(ASTNode* cond, ASTNode* body, int line);
-ASTNode* ast_for_stmt(const char* var_name, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* ast_for_stmt(const char* var_name, ASTNode* iterable, ASTNode* body, ASTNode* else_b, int line);
 ASTNode* ast_break_stmt(int line);
 ASTNode* ast_continue_stmt(int line);
 ASTNode* ast_block(ASTNode** stmts, int count, int line);

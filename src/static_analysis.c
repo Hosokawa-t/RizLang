@@ -482,6 +482,25 @@ static void sa_walk_expr(SACtx* C, ASTNode* n) {
         case NODE_MATCH_EXPR:
             sa_walk_match_expr(C, n);
             break;
+        case NODE_TERNARY:
+            sa_walk_expr(C, n->as.ternary.true_expr);
+            sa_walk_expr(C, n->as.ternary.condition);
+            sa_walk_expr(C, n->as.ternary.false_expr);
+            break;
+        case NODE_LIST_COMP:
+            sa_walk_expr(C, n->as.list_comp.iterable);
+            sa_push_scope(C);
+            sa_bind(C, n->as.list_comp.var_name);
+            if (n->as.list_comp.condition) sa_walk_expr(C, n->as.list_comp.condition);
+            sa_walk_expr(C, n->as.list_comp.expr);
+            sa_pop_scope(C);
+            break;
+        case NODE_SLICE:
+            sa_walk_expr(C, n->as.slice.object);
+            if (n->as.slice.start) sa_walk_expr(C, n->as.slice.start);
+            if (n->as.slice.end) sa_walk_expr(C, n->as.slice.end);
+            if (n->as.slice.step) sa_walk_expr(C, n->as.slice.step);
+            break;
         default:
             break;
     }
@@ -577,6 +596,7 @@ static void sa_walk_stmt(SACtx* C, ASTNode* n) {
             break;
         case NODE_FOR_STMT:
             sa_walk_for_stmt(C, n);
+            if (n->as.for_stmt.else_branch) sa_walk_stmt(C, n->as.for_stmt.else_branch);
             break;
         case NODE_BLOCK:
             sa_walk_block(C, n);

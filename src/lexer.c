@@ -165,6 +165,19 @@ static Token scan_string(Lexer* L) {
     return make_token(L, TOK_STRING);
 }
 
+/* Triple-quoted multi-line string: """...""" */
+static Token scan_triple_string(Lexer* L) {
+    while (!is_at_end(L)) {
+        if (peek(L) == '"' && peek_next(L) == '"' && L->current[2] == '"') {
+            advance(L); advance(L); advance(L); /* consume closing """ */
+            return make_token(L, TOK_STRING);
+        }
+        if (peek(L) == '\n') { L->line++; L->line_start = L->current + 1; }
+        advance(L);
+    }
+    return error_token(L, "Unterminated triple-quoted string");
+}
+
 static Token scan_number(Lexer* L) {
     while (is_digit(peek(L))) advance(L);
 
@@ -221,6 +234,20 @@ Token lexer_next_token(Lexer* L) {
     char c = advance(L);
 
     /* Identifiers & keywords */
+    /* f-string: f"..." */
+    if (c == 'f' && peek(L) == '"') {
+        advance(L); /* consume the opening " */
+        /* Check for f"""...""" */
+        if (peek(L) == '"' && peek_next(L) == '"') {
+            advance(L); advance(L); /* consume second and third " */
+            Token t = scan_triple_string(L);
+            if (t.type == TOK_STRING) t.type = TOK_FSTRING;
+            return t;
+        }
+        Token t = scan_string(L);
+        if (t.type == TOK_STRING) t.type = TOK_FSTRING;
+        return t;
+    }
     if (is_alpha(c)) return scan_identifier(L);
 
     /* Numbers */
@@ -281,7 +308,13 @@ Token lexer_next_token(Lexer* L) {
             return error_token(L, "Unexpected character '|'. Did you mean '|>'?");
 
         /* Strings */
-        case '"': return scan_string(L);
+        case '"':
+            /* Triple-quoted string: """...""" */
+            if (peek(L) == '"' && peek_next(L) == '"') {
+                advance(L); advance(L); /* consume second and third " */
+                return scan_triple_string(L);
+            }
+            return scan_string(L);
     }
 
     return error_token(L, "Unexpected character");
@@ -296,6 +329,7 @@ const char* token_type_name(TokenType type) {
         case TOK_INT:           return "INT";
         case TOK_FLOAT:         return "FLOAT";
         case TOK_STRING:        return "STRING";
+        case TOK_FSTRING:       return "FSTRING";
         case TOK_IDENTIFIER:    return "IDENTIFIER";
         case TOK_LPAREN:        return "(";
         case TOK_RPAREN:        return ")";

@@ -11,7 +11,7 @@
 /* ─── Token Types ─────────────────────────────────────── */
 typedef enum {
     /* Literals */
-    TOK_INT, TOK_FLOAT, TOK_STRING, TOK_IDENTIFIER,
+    TOK_INT, TOK_FLOAT, TOK_STRING, TOK_FSTRING, TOK_IDENTIFIER,
 
     /* Single-character tokens */
     TOK_LPAREN, TOK_RPAREN,       /* ( ) */
