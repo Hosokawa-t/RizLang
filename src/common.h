@@ -20,8 +20,8 @@
 /* ─── Version ─────────────────────────────────────────── */
 #define RIZ_VERSION_MAJOR 0
 #define RIZ_VERSION_MINOR 9
-#define RIZ_VERSION_PATCH 1
-#define RIZ_VERSION "0.9.1"
+#define RIZ_VERSION_PATCH 2
+#define RIZ_VERSION "0.9.2"
 
 /* ─── Limits ──────────────────────────────────────────── */
 #define RIZ_MAX_ARGS       255
