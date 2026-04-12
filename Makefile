@@ -29,12 +29,12 @@ run: $(OUT)
 	./$(OUT)
 
 test: $(OUT)
-	./$(OUT) examples/hello.riz
-	./$(OUT) --vm examples/vm_test.riz
+	./$(OUT) examples/intro/hello.riz
+	./$(OUT) --vm examples/vm/vm_test.riz
 
 # Optional: llama.cpp bridge (Linux .so)
 plugin_llama: $(OUT)
-	$(CC) -shared -O2 $(CFLAGS) -o plugin_llama_cli.so examples/plugin_llama_cli.c
+	$(CC) -shared -O2 $(CFLAGS) -o plugin_llama_cli.so examples/llm/plugin_llama_cli.c
 
 debug: $(SRC)
 	$(CC) -Wall -Wextra -std=c11 -g -O0 -Isrc -o riz_debug $(SRC) $(LDFLAGS)

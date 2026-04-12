@@ -1,0 +1,5 @@
+# Copy this file into your project (with riz.json if you use imports) and run:
+#   riz examples/intro/starter.riz
+print("Hello from Riz")
+let x = 1 + 2
+print("1 + 2 =", x)

@@ -8,7 +8,7 @@ set(CMAKE_PREFIX_PATH "d:/Riz/deps/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-add_library(plugin_torch SHARED examples/plugin_torch.cpp)
+add_library(plugin_torch SHARED examples/tensor/plugin_torch.cpp)
 target_include_directories(plugin_torch PRIVATE src)
 
 target_link_libraries(plugin_torch "${TORCH_LIBRARIES}")

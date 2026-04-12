@@ -165,6 +165,23 @@ static int compile_expr(ASTNode* node) {
             return r;
         }
 
+        case NODE_LIST_LIT: {
+            int n = node->as.list_lit.count;
+            if (n > 255) {
+                fprintf(stderr, "[compiler] list literal too long for VM (max 255 elements) at line %d\n", line);
+                C.had_error = true;
+                return 0;
+            }
+            int base = C.free_reg;
+            for (int i = 0; i < n; i++) {
+                compile_into(node->as.list_lit.items[i], base + i);
+                C.free_reg = base + i + 1;
+            }
+            int dest = alloc_reg();
+            emit(RIZ_ABC(OP_BUILDLIST, dest, base, (uint8_t)n), line);
+            return dest;
+        }
+
         case NODE_IDENTIFIER: {
             const char* name = node->as.identifier.name;
             int slot = resolve_local(name);

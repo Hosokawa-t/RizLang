@@ -165,14 +165,14 @@ try {
 ## Quick start (PowerShell)
 
     Set-Location `$PSScriptRoot
-    .\riz.exe examples\hello.riz
-    .\riz.exe check examples\hello.riz
+    .\riz.exe examples\intro\hello.riz
+    .\riz.exe check examples\intro\hello.riz
 
 ## AOT
 
 Use **gcc** on PATH (e.g. MSYS2), or add ``vendor\tcc\tcc.exe`` (TinyCC) under this folder.
 
-    .\riz.exe --aot examples\hello.riz
+    .\riz.exe --aot examples\intro\hello.riz
 
 Run the above from the extracted folder so ``src\`` resolves.
 

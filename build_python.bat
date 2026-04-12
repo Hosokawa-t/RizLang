@@ -7,7 +7,7 @@ set INCLUDE_DIR=%PYTHON_DIR%\include
 set LIB_DIR=%PYTHON_DIR%\libs
 
 echo === Compiling plugin_python.dll ===
-gcc -shared -Wall -Wextra -O2 -fPIC -Isrc -I"%INCLUDE_DIR%" examples\plugin_python.c -o plugin_python.dll -L"%LIB_DIR%" -lpython310
+gcc -shared -Wall -Wextra -O2 -fPIC -Isrc -I"%INCLUDE_DIR%" examples\python\plugin_python.c -o plugin_python.dll -L"%LIB_DIR%" -lpython310
 
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed!
@@ -15,4 +15,4 @@ if %errorlevel% neq 0 (
 )
 
 echo Build OK
-echo Run with: .\riz.exe examples\python_test.riz
+echo Run with: .\riz.exe examples\python\python_demo.riz

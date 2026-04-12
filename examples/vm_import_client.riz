@@ -1,2 +1,0 @@
-import "examples/pkg_vendor_lib.riz"
-print(double_it(21))

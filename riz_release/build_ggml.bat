@@ -24,7 +24,7 @@ ar rcs deps/ggml/libggml.a deps/ggml/build_ggml.o deps/ggml/build_ggml_alloc.o d
 if errorlevel 1 (echo archive: FAILED & exit /b 1) else (echo archive: OK)
 
 echo === Building plugin_ggml.dll ===
-g++ -shared -O2 -Isrc -Ideps/ggml/include -o plugin_ggml.dll examples/plugin_ggml.c deps/ggml/libggml.a -lm
+g++ -shared -O2 -Isrc -Ideps/ggml/include -o plugin_ggml.dll examples/llm/plugin_ggml.c deps/ggml/libggml.a -lm
 if errorlevel 1 (echo plugin: FAILED & exit /b 1) else (echo plugin: OK)
 
 echo === All done ===

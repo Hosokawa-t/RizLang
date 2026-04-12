@@ -326,6 +326,7 @@ VMResult vm_execute(RizVM* vm, Chunk* chunk) {
         [OP_RETURN]    = &&L_RETURN,
         [OP_PRINT]     = &&L_PRINT,
         [OP_GETINDEX]  = &&L_GETINDEX,
+        [OP_BUILDLIST] = &&L_BUILDLIST,
         [OP_IMPORT]        = &&L_IMPORT,
         [OP_IMPORT_NATIVE] = &&L_IMPORT_NATIVE,
         [OP_HALT]          = &&L_HALT,
@@ -618,6 +619,15 @@ L_PRINT: {
     DISPATCH();
 }
 
+L_BUILDLIST: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+    RizValue lst = riz_list_new();
+    for (int i = 0; i < c; i++)
+        riz_list_append(lst.as.list, riz_value_copy(R[b + i]));
+    R[a] = lst;
+    DISPATCH();
+}
+
 L_GETINDEX: {
     uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
     RizValue obj = R[b], idxv = R[c];
@@ -811,6 +821,14 @@ L_HALT:
                 break;
             }
             case OP_PRINT:{ uint8_t a=RIZ_A(instr),b=RIZ_B(instr); for(int i=0;i<b;i++){if(i>0)printf(" ");riz_value_print(R[a+i]);}printf("\n"); break; }
+            case OP_BUILDLIST: {
+                uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+                RizValue lst = riz_list_new();
+                for (int i = 0; i < c; i++)
+                    riz_list_append(lst.as.list, riz_value_copy(R[b + i]));
+                R[a] = lst;
+                break;
+            }
             case OP_GETINDEX: {
                 uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
                 if (R[b].type != VAL_LIST) {

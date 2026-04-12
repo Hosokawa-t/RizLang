@@ -1,0 +1,3 @@
+# LLM / GGUF: build plugin and edit a full script — start from infer_llama.riz.
+#   build_llama_cli_plugin.bat   (Windows) or see LLAMA_INFER.md
+print("Open examples/llm/infer_llama.riz and examples/llm/LLAMA_INFER.md next.")

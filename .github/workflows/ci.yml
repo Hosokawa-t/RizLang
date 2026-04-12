@@ -21,22 +21,22 @@ jobs:
             src/riz_env.c src/riz_import.c src/pkg.c -lm
 
       - name: Smoke — interpreter
-        run: ./riz examples/hello.riz
+        run: ./riz examples/intro/hello.riz
 
       - name: Smoke — interpreter (shutdown + struct)
-        run: ./riz examples/interpreter_smoke.riz
+        run: ./riz examples/intro/interpreter_smoke.riz
 
       - name: Smoke — VM
-        run: ./riz --vm examples/vm_test.riz
+        run: ./riz --vm examples/vm/vm_test.riz
 
       - name: Smoke — VM import
-        run: ./riz --vm examples/vm_import_client.riz
+        run: ./riz --vm examples/vm/vm_import_client.riz
 
       - name: Parse-check all examples (riz check)
         run: bash tools/check_examples.sh
 
       - name: Build llama bridge plugin (.so)
-        run: gcc -shared -O2 -Wall -Wextra -Isrc -o plugin_llama_cli.so examples/plugin_llama_cli.c
+        run: gcc -shared -O2 -Wall -Wextra -Isrc -o plugin_llama_cli.so examples/llm/plugin_llama_cli.c
 
       - uses: actions/setup-node@v4
         with:
@@ -78,10 +78,10 @@ jobs:
             src/interpreter.c src/value.c src/environment.c \
             src/chunk.c src/compiler.c src/vm.c src/codegen.c \
             src/riz_env.c src/riz_import.c src/pkg.c -lm
-          ./riz.exe examples/hello.riz
-          ./riz.exe examples/interpreter_smoke.riz
-          ./riz.exe --vm examples/vm_test.riz
-          ./riz.exe --vm examples/vm_import_client.riz
+          ./riz.exe examples/intro/hello.riz
+          ./riz.exe examples/intro/interpreter_smoke.riz
+          ./riz.exe --vm examples/vm/vm_test.riz
+          ./riz.exe --vm examples/vm/vm_import_client.riz
           bash tools/check_examples.sh
 
       - uses: actions/setup-node@v4

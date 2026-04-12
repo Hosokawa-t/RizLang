@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run `riz check` on every examples/*.riz (parse + diagnostics only).
+# Run `riz check` on every examples/**/*.riz (parse + diagnostics only).
 # Usage: from repo root, after building riz:
 #   bash tools/check_examples.sh
 #   bash tools/check_examples.sh ./path/to/riz
@@ -20,9 +20,13 @@ else
   exit 1
 fi
 
-shopt -s nullglob
-for f in examples/*.riz; do
-  echo "check $(basename "$f")"
+mapfile -t files < <(find examples -name '*.riz' -type f | sort)
+if [[ ${#files[@]} -eq 0 ]]; then
+  echo "check_examples: no .riz files under examples/" >&2
+  exit 1
+fi
+for f in "${files[@]}"; do
+  echo "check $f"
   "$RIZ" check "$f"
 done
 

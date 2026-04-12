@@ -1,0 +1,4 @@
+# Native binary via AOT (from repo root so src/ resolves):
+#   riz --aot examples/aot/starter.riz
+# Then run the generated executable next to the script.
+print("AOT:", 1 + 2)

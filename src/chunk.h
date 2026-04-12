@@ -73,6 +73,7 @@ typedef enum {
 
     /* Containers */
     OP_GETINDEX,    /* A B C    R[A] = copy of R[B][R[C]] (list + int index) */
+    OP_BUILDLIST,   /* A B C    R[A] = list of copies of R[B]..R[B+C-1] (C may be 0) */
 
     OP_IMPORT,       /* A Bx     load + run imported module (path in K[Bx]) */
     OP_IMPORT_NATIVE,/* A Bx    dlopen plugin (path string in K[Bx])   */

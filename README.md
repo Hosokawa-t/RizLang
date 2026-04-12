@@ -27,7 +27,7 @@ Riz is a high-performance, minimalist programming language designed for AI devel
 
 ## Recommended development environment
 
-- **Linux / macOS**: `gcc` or `clang` supporting **C11**, GNU `make`, standard POSIX shell. Build from the repo root with `make`; run examples with `./riz examples/hello.riz` and `./riz --vm examples/vm_test.riz`.
+- **Linux / macOS**: `gcc` or `clang` supporting **C11**, GNU `make`, standard POSIX shell. Build from the repo root with `make`; run examples with `./riz examples/intro/hello.riz` and `./riz --vm examples/vm/vm_test.riz`.
 - **Windows (recommended, matches CI)**: **MSYS2** with the **MinGW64** toolchain (`pacman -S mingw-w64-x86_64-gcc make`). Build and run from an **MSYS2 MinGW64** shell so paths and `gcc` match the Linux-oriented scripts. Optional: **Git for Windows** bash if you use `tools/check_examples.sh` instead of PowerShell.
 - **AOT (`riz --aot`)**: requires **`gcc` on PATH** (or bundled `vendor\tcc\tcc.exe` on Windows when GCC is not detected). The generated C is compiled together with `src/aot_runtime.c`, `src/value.c`, and other runtime sources as emitted by `main.c`.
 - **Editor tooling**: **Node.js** if you use the minimal LSP under `lsp/` (see `lsp/README.md`) or the `editors/riz-vscode` workspace.

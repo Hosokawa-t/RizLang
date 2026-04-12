@@ -1,0 +1,5 @@
+# Same as intro/starter.riz but run through the bytecode VM:
+#   riz --vm examples/vm/starter.riz
+print("Hello from Riz (VM)")
+let x = 1 + 2
+print("1 + 2 =", x)

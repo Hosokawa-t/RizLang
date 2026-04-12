@@ -1,0 +1,7 @@
+# Build CPU tensor plugin, from repo root:
+#   gcc -shared -O2 -Isrc -o plugin_tensor.dll examples/tensor/plugin_tensor.c -lm
+# Run:
+#   riz examples/tensor/starter.riz
+import_native "plugin_tensor.dll"
+let t = tensor_ones(2, 2)
+tensor_print(t)

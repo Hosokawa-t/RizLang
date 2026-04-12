@@ -1,0 +1,86 @@
+# ─── Riz VM Bytecode Test ────────────────
+# Run with: riz --vm examples/vm/vm_test.riz
+
+print("═══════════════════════════════════════")
+print("  Bytecode VM — Execution Test")
+print("═══════════════════════════════════════")
+
+fn add(a, b) {
+    return a + b
+}
+
+fn fact(n) {
+    if n <= 1 {
+        return 1
+    }
+    return n * fact(n - 1)
+}
+
+# Arithmetic
+print("")
+print("▸ Arithmetic")
+print("  2 + 3 =", 2 + 3)
+print("  10 - 4 =", 10 - 4)
+print("  6 * 7 =", 6 * 7)
+print("  15 / 4 =", 15 / 4)
+print("  17 % 5 =", 17 % 5)
+print("  2 ** 10 =", 2 ** 10)
+print("  17 // 3 =", 17 // 3)
+
+# String concatenation
+print("")
+print("▸ Strings")
+print("  Hello" + " " + "VM!")
+
+# Variables
+print("")
+print("▸ Variables")
+let x = 42
+let y = 3.14
+let name = "Riz VM"
+print("  x =", x)
+print("  y =", y)
+print("  name =", name)
+
+# Comparisons
+print("")
+print("▸ Comparisons")
+print("  5 == 5:", 5 == 5)
+print("  5 != 3:", 5 != 3)
+print("  3 < 5:", 3 < 5)
+print("  5 > 3:", 5 > 3)
+
+# If/Else
+print("")
+print("▸ Control Flow")
+let score = 85
+if score > 90 {
+    print("  Grade: A")
+} else {
+    if score > 80 {
+        print("  Grade: B")
+    } else {
+        print("  Grade: C")
+    }
+}
+
+# While loop
+print("")
+print("▸ While Loop: Sum 1..10")
+mut total = 0
+mut i = 1
+while i <= 10 {
+    total = total + i
+    i = i + 1
+}
+print("  Sum =", total)
+
+print("")
+print("▸ User functions")
+print("  add(2, 3) =", add(2, 3))
+print("  fact(5) =", fact(5))
+
+print("")
+print("═══════════════════════════════════════")
+print("  VM Test Complete! ✓")
+print("═══════════════════════════════════════")

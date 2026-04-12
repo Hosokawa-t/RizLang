@@ -14,8 +14,9 @@ if (-not (Test-Path $riz)) {
     Write-Error "riz or riz.exe not found in repo root. Build first."
 }
 
-Get-ChildItem -Path (Join-Path $Root "examples") -Filter "*.riz" | Sort-Object Name | ForEach-Object {
-    Write-Host "check $($_.Name)"
+Get-ChildItem -Path (Join-Path $Root "examples") -Filter "*.riz" -Recurse -File | Sort-Object FullName | ForEach-Object {
+    $rel = $_.FullName.Substring($Root.Length).TrimStart([char[]]@('\', '/'))
+    Write-Host "check $rel"
     & $riz check $_.FullName
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
