@@ -8,6 +8,7 @@
  *   - String/List/Dict method calls (obj.method())
  *   - import "file.riz" support
  *   - New builtins: format, sorted, reversed, enumerate, zip, keys, values, assert, exit
+ *   - More builtins: clamp, sign, floor, ceil, round, all, any, bool, ord, chr, extend
  */
 
 #include "interpreter.h"
@@ -15,6 +16,7 @@
 #include "parser.h"
 #include "riz_import.h"
 #include "riz_plugin.h"
+#include <math.h>
 
 /* ═══ Forward declarations ═══ */
 
@@ -267,6 +269,108 @@ static RizValue native_write_file(RizValue* args, int argc) {
 static RizValue native_has_key(RizValue* args, int argc) {
     if (argc!=2||args[0].type!=VAL_DICT||args[1].type!=VAL_STRING) return riz_bool(false);
     return riz_bool(riz_dict_has(args[0].as.dict, args[1].as.string));
+}
+
+/* Exported for AOT (aot_runtime.c links interpreter.c). */
+RizValue native_clamp(RizValue* args, int argc) {
+    if (argc != 3) { riz_runtime_error("clamp(value, lo, hi) takes 3 arguments"); return riz_none(); }
+    double v, lo, hi;
+    if (args[0].type == VAL_INT) v = (double)args[0].as.integer;
+    else if (args[0].type == VAL_FLOAT) v = args[0].as.floating;
+    else { riz_runtime_error("clamp(): value must be int or float"); return riz_none(); }
+    if (args[1].type == VAL_INT) lo = (double)args[1].as.integer;
+    else if (args[1].type == VAL_FLOAT) lo = args[1].as.floating;
+    else { riz_runtime_error("clamp(): lo must be int or float"); return riz_none(); }
+    if (args[2].type == VAL_INT) hi = (double)args[2].as.integer;
+    else if (args[2].type == VAL_FLOAT) hi = args[2].as.floating;
+    else { riz_runtime_error("clamp(): hi must be int or float"); return riz_none(); }
+    if (lo > hi) { double t = lo; lo = hi; hi = t; }
+    double c = v < lo ? lo : (v > hi ? hi : v);
+    bool all_int = (args[0].type == VAL_INT && args[1].type == VAL_INT && args[2].type == VAL_INT);
+    if (all_int && c == floor(c)) return riz_int((int64_t)c);
+    return riz_float(c);
+}
+
+RizValue native_sign(RizValue* args, int argc) {
+    if (argc != 1) { riz_runtime_error("sign(x) takes 1 argument"); return riz_none(); }
+    if (args[0].type == VAL_INT) {
+        int64_t x = args[0].as.integer;
+        return riz_int(x > 0 ? 1 : (x < 0 ? -1 : 0));
+    }
+    if (args[0].type == VAL_FLOAT) {
+        double x = args[0].as.floating;
+        return riz_int(x > 0.0 ? 1 : (x < 0.0 ? -1 : 0));
+    }
+    riz_runtime_error("sign(): expected int or float"); return riz_none();
+}
+
+RizValue native_floor_fn(RizValue* args, int argc) {
+    if (argc != 1) { riz_runtime_error("floor(x) takes 1 argument"); return riz_none(); }
+    if (args[0].type == VAL_INT) return args[0];
+    if (args[0].type == VAL_FLOAT) return riz_float(floor(args[0].as.floating));
+    riz_runtime_error("floor(): expected int or float"); return riz_none();
+}
+
+RizValue native_ceil_fn(RizValue* args, int argc) {
+    if (argc != 1) { riz_runtime_error("ceil(x) takes 1 argument"); return riz_none(); }
+    if (args[0].type == VAL_INT) return args[0];
+    if (args[0].type == VAL_FLOAT) return riz_float(ceil(args[0].as.floating));
+    riz_runtime_error("ceil(): expected int or float"); return riz_none();
+}
+
+RizValue native_round_fn(RizValue* args, int argc) {
+    if (argc != 1) { riz_runtime_error("round(x) takes 1 argument"); return riz_none(); }
+    if (args[0].type == VAL_INT) return args[0];
+    if (args[0].type == VAL_FLOAT) return riz_float(round(args[0].as.floating));
+    riz_runtime_error("round(): expected int or float"); return riz_none();
+}
+
+RizValue native_all(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_LIST) { riz_runtime_error("all(list) takes 1 list"); return riz_none(); }
+    RizList* L = args[0].as.list;
+    for (int i = 0; i < L->count; i++)
+        if (!riz_value_is_truthy(L->items[i])) return riz_bool(false);
+    return riz_bool(true);
+}
+
+RizValue native_any(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_LIST) { riz_runtime_error("any(list) takes 1 list"); return riz_none(); }
+    RizList* L = args[0].as.list;
+    for (int i = 0; i < L->count; i++)
+        if (riz_value_is_truthy(L->items[i])) return riz_bool(true);
+    return riz_bool(false);
+}
+
+RizValue native_as_bool(RizValue* args, int argc) {
+    if (argc != 1) { riz_runtime_error("bool(x) takes 1 argument"); return riz_none(); }
+    return riz_bool(riz_value_is_truthy(args[0]));
+}
+
+RizValue native_ord(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) { riz_runtime_error("ord(s) takes 1 string"); return riz_none(); }
+    const char* s = args[0].as.string;
+    size_t n = strlen(s);
+    if (n != 1) { riz_runtime_error("ord() expects a single-character string"); return riz_none(); }
+    return riz_int((int64_t)(unsigned char)s[0]);
+}
+
+RizValue native_chr(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_INT) { riz_runtime_error("chr(n) takes 1 int"); return riz_none(); }
+    int64_t n = args[0].as.integer;
+    if (n < 0 || n > 255) { riz_runtime_error("chr(): n must be in 0..255"); return riz_none(); }
+    char buf[2] = { (char)n, '\0' };
+    return riz_string(buf);
+}
+
+RizValue native_extend(RizValue* args, int argc) {
+    if (argc != 2 || args[0].type != VAL_LIST || args[1].type != VAL_LIST) {
+        riz_runtime_error("extend(list, other) requires two lists"); return riz_none();
+    }
+    RizList* a = args[0].as.list;
+    RizList* b = args[1].as.list;
+    for (int i = 0; i < b->count; i++)
+        riz_list_append(a, riz_value_copy(b->items[i]));
+    return riz_none();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -747,6 +851,17 @@ void riz_vm_seed_builtins(Environment* g) {
     env_define(g, "read_file",riz_native("read_file", native_read_file,   1), false);
     env_define(g, "write_file",riz_native("write_file", native_write_file, 2), false);
     env_define(g, "has_key",  riz_native("has_key",  native_has_key,     2), false);
+    env_define(g, "clamp",    riz_native("clamp",    native_clamp,       3), false);
+    env_define(g, "sign",     riz_native("sign",     native_sign,        1), false);
+    env_define(g, "floor",    riz_native("floor",    native_floor_fn,    1), false);
+    env_define(g, "ceil",     riz_native("ceil",     native_ceil_fn,     1), false);
+    env_define(g, "round",    riz_native("round",    native_round_fn,    1), false);
+    env_define(g, "all",      riz_native("all",      native_all,         1), false);
+    env_define(g, "any",      riz_native("any",      native_any,         1), false);
+    env_define(g, "bool",     riz_native("bool",     native_as_bool,     1), false);
+    env_define(g, "ord",      riz_native("ord",      native_ord,         1), false);
+    env_define(g, "chr",      riz_native("chr",      native_chr,         1), false);
+    env_define(g, "extend",   riz_native("extend",   native_extend,      2), false);
 }
 
 static void register_builtins(Interpreter* I) {

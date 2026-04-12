@@ -40,15 +40,22 @@ static Token make_token(Lexer* L, TokenType type) {
     t.start = L->start;
     t.length = (int)(L->current - L->start);
     t.line = L->line;
+    t.column = (int)(L->start - L->line_start);
+    if (t.column < 0)
+        t.column = 0;
     return t;
 }
 
 static Token error_token(Lexer* L, const char* message) {
     Token t;
+    int col = (int)(L->start - L->line_start);
+    if (col < 0)
+        col = 0;
     t.type = TOK_ERROR;
     t.start = message;
     t.length = (int)strlen(message);
     t.line = L->line;
+    t.column = col;
     return t;
 }
 
@@ -78,6 +85,7 @@ static void skip_whitespace(Lexer* L) {
             case '\n':
                 L->line++;
                 advance(L);
+                L->line_start = L->current;
                 break;
             case '#':
                 /* Single-line comment: skip until end of line */
@@ -199,6 +207,7 @@ void lexer_init(Lexer* lexer, const char* source) {
     lexer->source = source;
     lexer->start = source;
     lexer->current = source;
+    lexer->line_start = source;
     lexer->line = 1;
 }
 

@@ -152,6 +152,17 @@ extern RizValue native_abs(RizValue* a, int c);
 extern RizValue native_min(RizValue* a, int c);
 extern RizValue native_max(RizValue* a, int c);
 extern RizValue native_sum(RizValue* a, int c);
+extern RizValue native_clamp(RizValue* a, int c);
+extern RizValue native_sign(RizValue* a, int c);
+extern RizValue native_floor_fn(RizValue* a, int c);
+extern RizValue native_ceil_fn(RizValue* a, int c);
+extern RizValue native_round_fn(RizValue* a, int c);
+extern RizValue native_all(RizValue* a, int c);
+extern RizValue native_any(RizValue* a, int c);
+extern RizValue native_as_bool(RizValue* a, int c);
+extern RizValue native_ord(RizValue* a, int c);
+extern RizValue native_chr(RizValue* a, int c);
+extern RizValue native_extend(RizValue* a, int c);
 
 void aot_setup_builtins(void) {
     aot_register_user_fn("range", (NativeFnPtr)native_range, -1);
@@ -164,6 +175,17 @@ void aot_setup_builtins(void) {
     aot_register_user_fn("min", (NativeFnPtr)native_min, -1);
     aot_register_user_fn("max", (NativeFnPtr)native_max, -1);
     aot_register_user_fn("sum", (NativeFnPtr)native_sum, 1);
+    aot_register_user_fn("clamp", (NativeFnPtr)native_clamp, 3);
+    aot_register_user_fn("sign", (NativeFnPtr)native_sign, 1);
+    aot_register_user_fn("floor", (NativeFnPtr)native_floor_fn, 1);
+    aot_register_user_fn("ceil", (NativeFnPtr)native_ceil_fn, 1);
+    aot_register_user_fn("round", (NativeFnPtr)native_round_fn, 1);
+    aot_register_user_fn("all", (NativeFnPtr)native_all, 1);
+    aot_register_user_fn("any", (NativeFnPtr)native_any, 1);
+    aot_register_user_fn("bool", (NativeFnPtr)native_as_bool, 1);
+    aot_register_user_fn("ord", (NativeFnPtr)native_ord, 1);
+    aot_register_user_fn("chr", (NativeFnPtr)native_chr, 1);
+    aot_register_user_fn("extend", (NativeFnPtr)native_extend, 2);
 }
 
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args) {

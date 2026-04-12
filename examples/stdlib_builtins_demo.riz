@@ -1,0 +1,10 @@
+# Extended builtins (interpreter + VM). Run: riz examples/stdlib_builtins_demo.riz  |  riz --vm examples/stdlib_builtins_demo.riz
+print(clamp(10, 0, 5))
+print(sign(-4))
+let xs = range(3)
+append(xs, 4)
+print(len(xs))
+print(ord("A"))
+print(chr(65))
+print(all(range(0)))
+print(any(range(2)))

@@ -17,6 +17,7 @@
 #include "diagnostic.h"
 #include "pkg.h"
 #include "riz_import.h"
+#include "riz_env.h"
 
 /* ═══════════════════════════════════════════════════════
  *  File reading
@@ -217,7 +218,9 @@ static void print_help(void) {
     printf(COL_YELLOW "  Built-in Functions:" COL_RESET "\n");
     printf("    print, len, range, type, str, int, float\n");
     printf("    input, append, pop, abs, min, max, sum\n");
-    printf("    map, filter\n\n");
+    printf("    map, filter, format, sorted, zip, assert, …\n");
+    printf("    clamp, sign, floor, ceil, round, all, any, bool\n");
+    printf("    ord, chr, extend, read_file, write_file, has_key\n\n");
 }
 
 static void run_repl(void) {
@@ -320,6 +323,14 @@ int main(int argc, char* argv[]) {
         return riz_pkg_main(argc - 2, argv + 2);
     }
 
+    if (argc >= 2 && strcmp(argv[1], "env") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: riz env <doctor|setup|init|shell> ...  (try: riz env --help)\n");
+            return 1;
+        }
+        return riz_env_main(argc - 2, argv + 2, argv[0]);
+    }
+
     if (argc == 1) {
         /* No arguments → REPL mode */
         run_repl();
@@ -339,7 +350,8 @@ int main(int argc, char* argv[]) {
             printf("  -h, --help       Show this help\n");
             printf("  --vm <file>      Run file via Bytecode VM (experimental)\n");
             printf("  check <file>     Parse only; print NDJSON diagnostics to stdout\n");
-            printf("  pkg <cmd>        Package manager (install --locked, packages.index, …)\n\n");
+            printf("  pkg <cmd>        Package manager (install --locked, packages.index, …)\n");
+            printf("  env <cmd>        Easy environment: doctor, setup, shell (see riz env --help)\n\n");
             printf("If no file is given, starts the interactive REPL.\n");
             return 0;
         }
@@ -411,11 +423,11 @@ int main(int argc, char* argv[]) {
         char cmd[1024];
         if (use_gcc) {
             snprintf(cmd, sizeof(cmd),
-                "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" \"src/environment.c\" \"src/chunk.c\" \"src/interpreter.c\" \"src/diagnostic.c\" \"src/ast.c\" \"src/riz_import.c\" \"src/pkg.c\" \"src/lexer.c\" \"src/parser.c\" \"src/compiler.c\" \"src/vm.c\" \"src/codegen.c\" -lm",
+                "gcc -O2 -std=c11 -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" \"src/environment.c\" \"src/chunk.c\" \"src/interpreter.c\" \"src/diagnostic.c\" \"src/ast.c\" \"src/riz_import.c\" \"src/pkg.c\" \"src/riz_env.c\" \"src/lexer.c\" \"src/parser.c\" \"src/compiler.c\" \"src/vm.c\" \"src/codegen.c\" -lm",
                 exe_path, c_path);
         } else {
             snprintf(cmd, sizeof(cmd),
-                "vendor\\tcc\\tcc.exe -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" \"src/environment.c\" \"src/chunk.c\" \"src/interpreter.c\" \"src/diagnostic.c\" \"src/ast.c\" \"src/riz_import.c\" \"src/pkg.c\" \"src/lexer.c\" \"src/parser.c\" \"src/compiler.c\" \"src/vm.c\" \"src/codegen.c\"",
+                "vendor\\tcc\\tcc.exe -I\"src\" -o \"%s\" \"%s\" \"src/aot_runtime.c\" \"src/value.c\" \"src/environment.c\" \"src/chunk.c\" \"src/interpreter.c\" \"src/diagnostic.c\" \"src/ast.c\" \"src/riz_import.c\" \"src/pkg.c\" \"src/riz_env.c\" \"src/lexer.c\" \"src/parser.c\" \"src/compiler.c\" \"src/vm.c\" \"src/codegen.c\"",
                 exe_path, c_path);
         }
         
@@ -430,6 +442,6 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    fprintf(stderr, "Usage: riz [check|--vm|--aot|file.riz] ...\n");
+    fprintf(stderr, "Usage: riz [check|--vm|--aot|env|pkg|file.riz] ...\n");
     return 1;
 }

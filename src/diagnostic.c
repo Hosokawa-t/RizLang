@@ -23,17 +23,17 @@ static void json_escape_and_print(FILE* out, const char* s) {
     fputc('"', out);
 }
 
-void riz_error(int line, const char* fmt, ...) {
-    char buf[2048];
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buf, sizeof buf, fmt, ap);
-    va_end(ap);
-    buf[sizeof(buf) - 1] = '\0';
-
+static void emit_diag_line(int line, int col0, int col1_exc, const char* buf) {
     if (riz_machine_diag_mode) {
         FILE* out = stdout;
-        fprintf(out, "{\"line\":%d,\"message\":", line);
+        fprintf(out, "{\"line\":%d", line);
+        if (col0 >= 0) {
+            int end = col1_exc;
+            if (end <= col0)
+                end = col0 + 1;
+            fprintf(out, ",\"startColumn\":%d,\"endColumn\":%d", col0, end);
+        }
+        fprintf(out, ",\"message\":");
         json_escape_and_print(out, buf);
         fprintf(out, ",\"source\":\"riz-parse\"");
         if (riz_diag_source_path && riz_diag_source_path[0]) {
@@ -48,4 +48,24 @@ void riz_error(int line, const char* fmt, ...) {
     fprintf(stderr, COL_RED COL_BOLD "Error" COL_RESET
             COL_RED " [line %d]: " COL_RESET COL_RED "%s" COL_RESET "\n",
             line, buf);
+}
+
+void riz_error(int line, const char* fmt, ...) {
+    char buf[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    buf[sizeof(buf) - 1] = '\0';
+    emit_diag_line(line, -1, -1, buf);
+}
+
+void riz_error_col(int line, int start_column, int end_column_exclusive, const char* fmt, ...) {
+    char buf[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    buf[sizeof(buf) - 1] = '\0';
+    emit_diag_line(line, start_column, end_column_exclusive, buf);
 }

@@ -70,6 +70,7 @@ typedef struct {
     const char* start;      /* pointer into source string */
     int         length;
     int         line;
+    int         column;     /* 0-based UTF-8 byte offset in line (machine diagnostics) */
 } Token;
 
 /* ─── Lexer State ─────────────────────────────────────── */
@@ -77,6 +78,7 @@ typedef struct {
     const char* source;
     const char* start;
     const char* current;
+    const char* line_start; /* start of current line in source */
     int         line;
 } Lexer;
 

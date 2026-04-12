@@ -4,6 +4,7 @@
  */
 
 #include "parser.h"
+#include "diagnostic.h"
 
 /* ═══ Helpers ═══ */
 
@@ -12,7 +13,10 @@ static void advance_parser(Parser* P) {
     for (;;) {
         P->current = lexer_next_token(P->lexer);
         if (P->current.type != TOK_ERROR) break;
-        riz_error(P->current.line, "%.*s", P->current.length, P->current.start);
+        {
+            int ec = P->current.column + (P->current.length > 0 ? P->current.length : 1);
+            riz_error_col(P->current.line, P->current.column, ec, "%.*s", P->current.length, P->current.start);
+        }
         P->had_error = true;
     }
 }
@@ -23,7 +27,8 @@ static bool match(Parser* P, TokenType type) {
 }
 static Token consume(Parser* P, TokenType type, const char* msg) {
     if (P->current.type == type) { advance_parser(P); return P->previous; }
-    riz_error(P->current.line, "%s (got '%.*s')", msg, P->current.length, P->current.start);
+    riz_error_col(P->current.line, P->current.column, P->current.column + P->current.length,
+                   "%s (got '%.*s')", msg, P->current.length, P->current.start);
     P->had_error = true;
     Token t = P->current; advance_parser(P); return t;
 }
@@ -116,7 +121,7 @@ static ASTNode* parse_dict_literal(Parser* P) {
                     key = ast_string_lit(name, id.line);
                     free(name);
                 } else {
-                    riz_error(id.line, "Expected ':' after key in dict literal");
+                    riz_error_col(id.line, id.column, id.column + id.length, "Expected ':' after key in dict literal");
                     P->had_error = true;
                     char* name = token_text(id);
                     key = ast_string_lit(name, id.line);
@@ -173,11 +178,12 @@ static ASTNode* parse_primary(Parser* P) {
     if (match(P, TOK_MATCH)) return parse_match_expr(P);
     /* '{' that isn't a dict */
     if (check(P, TOK_LBRACE)) {
-        riz_error(line, "Unexpected '{'");
+        riz_error_col(P->current.line, P->current.column, P->current.column + P->current.length, "Unexpected '{'");
         P->had_error = true;
         return ast_none_lit(line);
     }
-    riz_error(line, "Expected expression, got '%.*s'", P->current.length, P->current.start);
+    riz_error_col(P->current.line, P->current.column, P->current.column + (P->current.length > 0 ? P->current.length : 1),
+                   "Expected expression, got '%.*s'", P->current.length, P->current.start);
     P->had_error = true;
     advance_parser(P);
     return ast_none_lit(line);
@@ -192,7 +198,7 @@ static ASTNode* parse_call(Parser* P) {
         if (match(P, TOK_LPAREN)) {
             int cap=8,cnt=0; ASTNode**args=RIZ_ALLOC_ARRAY(ASTNode*,cap);
             if(!check(P,TOK_RPAREN)){
-                do{if(cnt>=RIZ_MAX_ARGS){riz_error(line,"Too many arguments");break;}
+                do{if(cnt>=RIZ_MAX_ARGS){riz_error_col(P->current.line,P->current.column,P->current.column+P->current.length,"Too many arguments");break;}
                    if(cnt>=cap){cap*=2;args=RIZ_GROW_ARRAY(ASTNode*,args,cnt,cap);}args[cnt++]=parse_expression(P);
                 }while(match(P,TOK_COMMA));
             }
@@ -284,7 +290,9 @@ static ASTNode* parse_assignment(Parser* P) {
             free(expr);
             return ast_index_assign(obj, idx, parse_assignment(P), line);
         }
-        riz_error(line, "Invalid assignment target"); P->had_error = true;
+        riz_error_col(P->previous.line, P->previous.column, P->previous.column + P->previous.length,
+                      "Invalid assignment target");
+        P->had_error = true;
     }
     if (match(P,TOK_PLUS_ASSIGN)||match(P,TOK_MINUS_ASSIGN)||
         match(P,TOK_STAR_ASSIGN)||match(P,TOK_SLASH_ASSIGN)) {
@@ -295,7 +303,9 @@ static ASTNode* parse_assignment(Parser* P) {
             char*name=riz_strdup(expr->as.identifier.name); ast_free(expr);
             return ast_compound_assign(name,bop,parse_assignment(P),line);
         }
-        riz_error(line, "Invalid compound assignment target"); P->had_error = true;
+        riz_error_col(P->previous.line, P->previous.column, P->previous.column + P->previous.length,
+                      "Invalid compound assignment target");
+        P->had_error = true;
     }
     return expr;
 }
@@ -416,7 +426,7 @@ static ASTNode* parse_fn_decl(Parser* P) {
             } else {
                 defaults[pc] = NULL;
                 if (seen_default) {
-                    riz_error(line, "Non-default parameter after default parameter");
+                    riz_error_col(pt.line, pt.column, pt.column + pt.length, "Non-default parameter after default parameter");
                     P->had_error = true;
                 }
             }

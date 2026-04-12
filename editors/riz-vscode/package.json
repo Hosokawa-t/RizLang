@@ -2,7 +2,7 @@
   "name": "riz",
   "displayName": "Riz",
   "description": "Riz language support (syntax + LSP diagnostics via riz check)",
-  "version": "0.1.0",
+  "version": "0.9.3",
   "license": "MIT",
   "publisher": "thosokawa",
   "repository": {
@@ -66,6 +66,13 @@
           "type": "string",
           "default": "",
           "description": "Path to the Node.js binary. Empty = use the same Node that runs the extension host."
+        },
+        "riz.diagnosticDelay": {
+          "type": "number",
+          "default": 200,
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "Milliseconds to debounce `riz check` after edits (LSP server)."
         }
       }
     }

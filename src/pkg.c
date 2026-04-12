@@ -165,7 +165,9 @@ static void print_usage(void) {
         "  riz pkg install [--locked]  Resolve deps; --locked = verify %s, no network/copy\n"
         "  riz pkg update            Re-fetch only git dependencies\n"
         "  riz pkg sync              Write merged deps into %s \"dependencies\"\n"
-        "  riz pkg tree              Print merged dependency list\n",
+        "  riz pkg tree              Print merged dependency list\n"
+        "\n"
+        "Tip: `riz env setup` runs init + install + writes .riz/activate.* for PATH (see riz env --help).\n",
         RIZ_PKG_JSON, RIZ_PKG_DEPS, RIZ_PKG_INDEX_DEFAULT, RIZ_PKG_INDEX_DEFAULT, RIZ_PKG_LOCK, RIZ_PKG_JSON);
 }
 
@@ -564,6 +566,11 @@ static int merge_deps_from_disk(DepEntry* deps, int maxdeps) {
         fclose(f);
     }
     return n;
+}
+
+int riz_pkg_merged_dep_count(void) {
+    DepEntry deps[MAX_DEPS];
+    return merge_deps_from_disk(deps, MAX_DEPS);
 }
 
 static const char* strip_path_prefix(const char* spec) {

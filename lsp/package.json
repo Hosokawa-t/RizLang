@@ -1,6 +1,6 @@
 {
   "name": "riz-lsp",
-  "version": "0.1.0",
+  "version": "0.9.3",
   "private": true,
   "description": "Minimal Language Server for Riz (parse diagnostics via riz check)",
   "main": "out/server.js",
