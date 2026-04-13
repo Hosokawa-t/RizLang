@@ -12,6 +12,7 @@ Run commands from the **repository root** unless noted. Import strings use paths
 | **`tensor/`** | Tensor plugin (CPU dummy + training demos; includes `test_cuda.riz` / `test_inference.riz`) |
 | **`llm/`** | GGUF / llama.cpp CLI bridge (`plugin_llama_cli.c`, `LLAMA_INFER.md`, `chat_demo.riz`) |
 | **`bench/`** | Performance-oriented loops (`pi_bench.riz`, `parallel_sum_bench.riz`, `bench_gpu.riz`, `bench_gpu.py`) |
+| **`dogfood/`** | Small tool-style apps used to evaluate Riz ergonomics on real scripts |
 | **`syntax/`** | Tiny parser/truthiness smoke snippets (`test_if*.riz`) |
 
 Folders **`intro/`**, **`vm/`**, **`aot/`**, **`python/`**, **`tensor/`**, and **`llm/`** each ship a minimal **`starter.riz`** you can copy into your own project. **`bench/`** holds timing loops and cross-language benchmark pairs, while **`syntax/`** keeps tiny parse/truthiness smoke snippets.
@@ -25,6 +26,7 @@ Folders **`intro/`**, **`vm/`**, **`aot/`**, **`python/`**, **`tensor/`**, and *
 ```bash
 riz examples/intro/starter.riz
 riz examples/intro/hello.riz
+riz examples/intro/stdlib_power_demo.riz --mode smoke
 ```
 
 **VM**
@@ -76,6 +78,17 @@ riz examples/bench/bench_gpu.riz
 python examples/bench/bench_gpu.py
 ```
 
+**Dogfood apps**
+
+```bash
+riz examples/dogfood/task_board.riz
+riz examples/dogfood/expense_report.riz
+riz examples/dogfood/release_notes.riz
+riz examples/dogfood/fixture_pkg_audit.riz
+riz examples/dogfood/task_board.riz --status done
+riz examples/dogfood/fixture_pkg_audit.riz --root tests
+```
+
 **Parse-check every `.riz` under `examples/`**
 
 ```bash
@@ -88,9 +101,12 @@ bash tools/check_examples.sh
 ## 日本語メモ
 
 - **入門**は `intro/`（`starter.riz`・`hello.riz`・`import_demo.riz` と `math.riz`）。
+- `examples/intro/stdlib_power_demo.riz` は、`read_lines` / `join_path` / `read_json` / `json_stringify` など新しめの標準ライブラリ確認用です。
+- 同じ `stdlib_power_demo.riz` では `argv()` / `parse_flags()` / `read_tsv()` / `glob()` / `walk_dir()` / `mkdir()` も確認できます。
 - **VM**は `vm/`。`vm_import_client.riz` は `examples/vm/pkg_vendor_lib.riz` を import する例です。
 - **AOT**は `aot/`。**Python / テンソル / LLM** は各フォルダの `starter.riz` と README コメントが最短ルートです。
 - **ベンチマーク**は `bench/`（`bench_gpu.riz` / `bench_gpu.py` を含む）。
+- **ドッグフード用ツール**は `dogfood/`。小さな実用スクリプトを通して使い勝手を見るためのサンプルです。
 - **小さな文法スモーク**は `syntax/`（`test_if*.riz`）。
 
 Built-ins の一覧はリポジトリ直下の **`README.md`** の「Built-in Functions」を参照してください。

@@ -1,0 +1,49 @@
+import "examples/dogfood/lib.riz"
+
+struct Fixture { name, base }
+
+impl Fixture {
+    fn deps_path(self) => join_path(self.base, "riz.deps")
+    fn lock_path(self) => join_path(self.base, "riz.lock")
+    fn json_path(self) => join_path(self.base, "riz.json")
+    fn index_path(self) => join_path(self.base, "packages.index")
+    fn vendor_root(self) => join_path(self.base, "vendor")
+}
+
+fn print_fixture_row(fixture) {
+    let has_manifest = file_present(fixture.json_path())
+    let has_lock = file_present(fixture.lock_path())
+    let has_index = file_present(fixture.index_path())
+    let dep_rows = count_data_lines(fixture.deps_path())
+    let vendor_entries = walk_dir(fixture.vendor_root()) if dir_exists(fixture.vendor_root()) else []
+
+    print(
+        "  "
+        + pad_right(fixture.name, 14)
+        + " manifest=" + bool_mark(has_manifest)
+        + " deps=" + str(dep_rows)
+        + " lock=" + bool_mark(has_lock)
+        + " index=" + bool_mark(has_index)
+        + " vendor_entries=" + str(len(vendor_entries))
+    )
+}
+
+fn find_fixtures(root) {
+    mut fixtures = []
+    for path in glob(join_path(root, "_*")) {
+        if dir_exists(path) {
+            fixtures.push(Fixture(basename(path), path))
+        }
+    }
+    return fixtures
+}
+
+let cli = parse_flags()
+let root = cli.positionals[0] if len(cli.positionals) > 0 else cli.flags.get("root", "tests")
+let fixtures = find_fixtures(root)
+
+print_banner("Dogfood App 4 / Package fixture audit")
+print("Auditing real package-manager fixtures under " + root)
+for fixture in fixtures {
+    print_fixture_row(fixture)
+}

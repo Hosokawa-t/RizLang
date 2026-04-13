@@ -1,4 +1,4 @@
-# Riz — lightweight native scripting for AI tooling (v0.9.6)
+# Riz — lightweight native scripting for AI tooling (v0.9.7)
 
 Riz is a small, C-first language with a **tree-walking interpreter**, an experimental **register VM**, and an **AOT path** to standalone native binaries. It targets workflows where you want **C-level deployment** without giving up a script-shaped surface (imports, structs, `try`/`catch`/`throw`, plugins).
 
@@ -13,6 +13,7 @@ Figures are illustrative; measure on your machine for serious comparisons.
 ## Highlights
 
 - **Dual runtime**: interpreter for fast iteration; `riz --vm` for bytecode; `riz --aot` for emitted C + native binary.
+- **CLI-friendly scripts**: `riz app.riz --flag value` flows into `argv()`, `argc()`, `script_path()`, and `parse_flags()`.
 - **Optional type hints** (`: int`, `: float`, …) for documentation and AOT-oriented codegen.
 - **Plugins**: `import_native` / **`import_python`** (default `plugin_python` library name) load `.dll` / `.so` / `.dylib` — Python (`examples/python/`), tensors, LLM bridge, etc.
 - **Diagnostics**: `riz check` / `riz check --strict` (NDJSON; strict fails on warnings) with **lexical scope and undefined-name checks**, **`import "…"` export collection**, and **plugin-aware heuristics** after `import_native`; **LSP** under `lsp/`, VS Code workspace under `editors/riz-vscode`.
@@ -23,13 +24,18 @@ Figures are illustrative; measure on your machine for serious comparisons.
 
 | Area | Functions |
 |------|-----------|
-| I/O | `print`, `input`, `read_file`, `write_file` |
+| I/O | `print`, `input`, `read_file`, `write_file`, `read_lines`, `write_lines` |
+| CLI | `argv`, `argc`, `script_path`, `parse_flags` |
 | Values | `type`, `str`, `int`, `float`, `bool`, `len`, `range` |
 | Collections | `append`, `pop`, `extend`, `map`, `filter`, `sorted`, `reversed`, `enumerate`, `zip`, `keys`, `values`, `has_key` |
 | Strings / text | `format`, `ord`, `chr` |
+| Delimited text | `parse_csv`, `read_csv`, `parse_tsv`, `read_tsv` |
 | Math | `abs`, `min`, `max`, `sum`, `clamp`, `sign`, `floor`, `ceil`, `round` |
 | Parallel | `cpu_count`, `parallel_sum` |
 | Logic | `all`, `any` |
+| Files / paths | `file_exists`, `dir_exists`, `list_dir`, `walk_dir`, `glob`, `mkdir`, `cwd`, `basename`, `dirname`, `join_path` |
+| Environment | `getenv` |
+| JSON | `json_parse`, `json_stringify`, `read_json`, `write_json` |
 | Control | `assert`, `debug`, `panic`, `exit` |
 | Python bridge | **`py.exec` / `py.import` / …** (global `py` dict) and legacy `py_exec`, `py_import`, … after loading the plugin |
 
@@ -48,12 +54,14 @@ Sample programs live under **`examples/`** by use case. See **`examples/README.m
 | `examples/tensor/` | Tensor / training demos, optional PyTorch plugin |
 | `examples/llm/` | GGUF / llama.cpp CLI bridge |
 | `examples/bench/` | CPU/GPU benchmarks (`pi_bench`, `parallel_sum_bench`, `bench_gpu`) |
+| `examples/dogfood/` | Small tool-shaped apps that exercise real workflows and the richer stdlib |
 | `examples/syntax/` | Tiny syntax/truthiness smoke snippets (`if` variants) |
 
 Quick smoke (from repo root):
 
 ```bash
 ./riz examples/intro/hello.riz
+./riz examples/intro/stdlib_power_demo.riz --mode smoke
 ./riz --vm examples/vm/vm_test.riz
 ```
 
@@ -134,6 +142,24 @@ Python デモのパス例: `examples/python/python_demo.riz`（先に `plugin_py
 - **エディタ**: `lsp/` 利用時は Node.js（`lsp/README.md`）。
 - **最短セットアップ**: **`riz env setup`** → `.riz/activate.*` を読み込み。
 
+## Package install
+
+Riz now has a pip-like shortcut:
+
+```bash
+riz install hello
+riz install owner/repo
+riz install https://github.com/owner/repo.git#main
+riz install ./local_lib
+```
+
+- `riz install <name>`: resolve from `packageIndex` in `riz.json`, local `packages.index`, or `RIZ_PACKAGE_INDEX`.
+- `riz install owner/repo`: installs directly from GitHub without editing `riz.deps`.
+- `riz install ./path` or `riz install file.riz`: vendors a local package path.
+- If `riz.json` / `riz.deps` do not exist yet, Riz bootstraps a package project in the current directory automatically.
+
+`riz install` with no package name still installs dependencies already listed in the manifest, same as `riz pkg install`.
+
 ## Testing
 
 After building, `tools/check_examples.*` runs **`riz check --strict`** on every `examples/**/*.riz` (warnings fail the check). For local runs, `riz check file.riz` without `--strict` keeps exit code 0 when only warnings are reported. **`RIZ_CHECK_STRICT=1`** in the environment is equivalent to passing **`--strict`**.
@@ -157,7 +183,7 @@ pwsh tools/package_windows_release.ps1
 
 **CI**: Windows ジョブが成果物 **`riz-windows-x64-zip`** をアップロードします。リリースへ載せる例:
 
-`gh release upload v0.9.6 riz-v0.9.6-windows-x64.zip --clobber`
+`gh release upload v0.9.7 riz-v0.9.7-windows-x64.zip --clobber`
 
 ## License
 

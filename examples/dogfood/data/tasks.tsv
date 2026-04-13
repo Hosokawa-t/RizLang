@@ -1,0 +1,9 @@
+id	title	owner	status	points
+T-101	Bootstrap riz install shortcut	Mika	done	5
+T-102	Teach VS Code syntax about import_python	Ken	done	2
+T-103	Add fixture package audit script	Ana	doing	3
+T-104	Review plugin metadata model	Mika	blocked	5
+T-105	Write dogfood examples README	Ana	done	2
+T-106	Add search command for package index	Ken	todo	5
+T-107	Improve static analysis for plugins	Mika	doing	8
+T-108	Stabilize release zip tooling	Ana	todo	3

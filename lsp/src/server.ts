@@ -30,6 +30,7 @@ import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
 const execFileAsync = promisify(execFile);
 const connection = createConnection(ProposedFeatures.all);
@@ -40,6 +41,7 @@ const openBuffers = new Map<string, TextDocument>();
 let rizExecutable = process.env.RIZ_PATH?.trim() || (process.platform === "win32" ? "riz.exe" : "riz");
 let debounceMs = 200;
 const debouncers = new Map<string, ReturnType<typeof setTimeout>>();
+let tempFileSeq = 0;
 
 /* ─── Riz keywords & builtins (keep in sync with interpreter help) ─── */
 
@@ -103,8 +105,33 @@ const BUILTIN_HELP: Record<string, string> = {
   debug: "`debug(value, label?)` — print to stderr with source line; returns `value` (Rust-style `dbg!`).",
   panic: "`panic(message?)` — print message and call stack, then `exit(1)`.",
   exit: "`exit(code?)` — terminate process.",
+  argv: "`argv()` — script arguments as a list of strings.",
+  argc: "`argc()` — number of script arguments.",
+  script_path: "`script_path()` — current Riz source path when running a file.",
+  parse_flags: "`parse_flags(args?)` — split CLI args into `{raw, flags, positionals}`.",
   read_file: "`read_file(path)` — file as string.",
   write_file: "`write_file(path, content)` — bool success.",
+  read_lines: "`read_lines(path)` — file as list of lines.",
+  write_lines: "`write_lines(path, lines)` — write list items joined by newline.",
+  parse_csv: "`parse_csv(text, header?)` — CSV text to rows or dict records.",
+  read_csv: "`read_csv(path, header?)` — CSV file to rows or dict records.",
+  parse_tsv: "`parse_tsv(text, header?)` — TSV text to rows or dict records.",
+  read_tsv: "`read_tsv(path, header?)` — TSV file to rows or dict records.",
+  file_exists: "`file_exists(path)` — true when a regular file exists.",
+  dir_exists: "`dir_exists(path)` — true when a directory exists.",
+  list_dir: "`list_dir(path?)` — directory entry names.",
+  walk_dir: "`walk_dir(path?)` — recursive descendant paths.",
+  glob: "`glob(pattern)` — wildcard path matches (`*`, `?`, `**`).",
+  mkdir: "`mkdir(path, parents?)` — create a directory, optionally recursive.",
+  cwd: "`cwd()` — current working directory.",
+  getenv: "`getenv(name, default?)` — environment variable lookup.",
+  basename: "`basename(path)` — last path segment.",
+  dirname: "`dirname(path)` — parent directory or `.`.",
+  join_path: "`join_path(...parts)` — platform-aware path join.",
+  json_parse: "`json_parse(text)` — JSON string to Riz values.",
+  json_stringify: "`json_stringify(value, pretty?)` — Riz values to JSON string.",
+  read_json: "`read_json(path)` — file to Riz values via JSON parse.",
+  write_json: "`write_json(path, value, pretty?)` — write value as JSON.",
   has_key: "`has_key(dict, keyStr)` — bool.",
   clamp: "`clamp(value, lo, hi)` — clamp numeric.",
   sign: "`sign(x)` — -1, 0, or 1.",
@@ -131,6 +158,33 @@ const BUILTIN_SIGNATURES: Record<string, { label: string; doc?: string; params?:
   input: { label: "input(prompt?)", params: [{ label: "prompt?" }] },
   map: { label: "map(list, fn)", params: [{ label: "list" }, { label: "fn" }] },
   filter: { label: "filter(list, fn)", params: [{ label: "list" }, { label: "fn" }] },
+  argv: { label: "argv()", params: [] },
+  argc: { label: "argc()", params: [] },
+  script_path: { label: "script_path()", params: [] },
+  parse_flags: { label: "parse_flags(args?)", params: [{ label: "args?" }] },
+  read_file: { label: "read_file(path)", params: [{ label: "path" }] },
+  write_file: { label: "write_file(path, content)", params: [{ label: "path" }, { label: "content" }] },
+  read_lines: { label: "read_lines(path)", params: [{ label: "path" }] },
+  write_lines: { label: "write_lines(path, lines)", params: [{ label: "path" }, { label: "lines" }] },
+  parse_csv: { label: "parse_csv(text, header?)", params: [{ label: "text" }, { label: "header?" }] },
+  read_csv: { label: "read_csv(path, header?)", params: [{ label: "path" }, { label: "header?" }] },
+  parse_tsv: { label: "parse_tsv(text, header?)", params: [{ label: "text" }, { label: "header?" }] },
+  read_tsv: { label: "read_tsv(path, header?)", params: [{ label: "path" }, { label: "header?" }] },
+  file_exists: { label: "file_exists(path)", params: [{ label: "path" }] },
+  dir_exists: { label: "dir_exists(path)", params: [{ label: "path" }] },
+  list_dir: { label: "list_dir(path?)", params: [{ label: "path?" }] },
+  walk_dir: { label: "walk_dir(path?)", params: [{ label: "path?" }] },
+  glob: { label: "glob(pattern)", params: [{ label: "pattern" }] },
+  mkdir: { label: "mkdir(path, parents?)", params: [{ label: "path" }, { label: "parents?" }] },
+  cwd: { label: "cwd()", params: [] },
+  getenv: { label: "getenv(name, default?)", params: [{ label: "name" }, { label: "default?" }] },
+  basename: { label: "basename(path)", params: [{ label: "path" }] },
+  dirname: { label: "dirname(path)", params: [{ label: "path" }] },
+  join_path: { label: "join_path(...parts)", params: [{ label: "…parts" }] },
+  json_parse: { label: "json_parse(text)", params: [{ label: "text" }] },
+  json_stringify: { label: "json_stringify(value, pretty?)", params: [{ label: "value" }, { label: "pretty?" }] },
+  read_json: { label: "read_json(path)", params: [{ label: "path" }] },
+  write_json: { label: "write_json(path, value, pretty?)", params: [{ label: "path" }, { label: "value" }, { label: "pretty?" }] },
   clamp: { label: "clamp(value, lo, hi)", params: [{ label: "value" }, { label: "lo" }, { label: "hi" }] },
   debug: { label: "debug(value, label?)", params: [{ label: "value" }, { label: "label?" }] },
   panic: { label: "panic(message?)", params: [{ label: "message?" }] },
@@ -214,14 +268,63 @@ function ndjsonLineToDiagnostic(doc: TextDocument, o: RizDiagJson): Diagnostic {
   };
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function tryGetDocumentFsPath(doc: TextDocument): string | null {
+  if (!doc.uri.startsWith("file:")) return null;
+  try {
+    return fileURLToPath(doc.uri);
+  } catch {
+    return null;
+  }
+}
+
+async function findProjectRoot(filePath: string): Promise<string | null> {
+  let dir = path.dirname(filePath);
+  const root = path.parse(dir).root;
+  for (let depth = 0; depth < 64; depth++) {
+    if (await pathExists(path.join(dir, "riz.json"))) return dir;
+    if (dir === root) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+async function prepareCheckInput(doc: TextDocument): Promise<{ tmpPath: string; cwd: string }> {
+  const seq = ++tempFileSeq;
+  const fsPath = tryGetDocumentFsPath(doc);
+  if (fsPath) {
+    const dir = path.dirname(fsPath);
+    return {
+      tmpPath: path.join(dir, `.riz-lsp-${process.pid}-${seq}-${path.basename(fsPath)}`),
+      cwd: (await findProjectRoot(fsPath)) ?? dir,
+    };
+  }
+
+  const safe = doc.uri.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(-80);
+  return {
+    tmpPath: path.join(os.tmpdir(), `riz-lsp-${process.pid}-${seq}-${safe}.riz`),
+    cwd: process.cwd(),
+  };
+}
+
 async function validateDocument(doc: TextDocument): Promise<Diagnostic[]> {
   await refreshFromWorkspaceConfig();
   const text = doc.getText();
-  const safe = doc.uri.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(-80);
-  const tmp = path.join(os.tmpdir(), `riz-lsp-${process.pid}-${safe}.riz`);
-  await fs.writeFile(tmp, text, "utf8");
+  const { tmpPath, cwd } = await prepareCheckInput(doc);
+  await fs.writeFile(tmpPath, text, "utf8");
   try {
-    const { stdout } = await execFileAsync(rizExecutable, ["check", tmp], {
+    const { stdout } = await execFileAsync(rizExecutable, ["check", tmpPath], {
+      cwd,
       encoding: "utf8",
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true,
@@ -250,7 +353,7 @@ async function validateDocument(doc: TextDocument): Promise<Diagnostic[]> {
       },
     ];
   } finally {
-    await fs.unlink(tmp).catch(() => {});
+    await fs.unlink(tmpPath).catch(() => {});
   }
 }
 

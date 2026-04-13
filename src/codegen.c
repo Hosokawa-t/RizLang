@@ -200,7 +200,11 @@ static const char* emit_expr(ASTNode* node) {
                 const char* key = emit_expr_box(node->as.dict_lit.keys[i]);
                 char key_safe[256]; strncpy(key_safe, key, 255); key_safe[255] = '\0';
                 const char* val = emit_expr_box(node->as.dict_lit.values[i]);
-                ind(); fprintf(G.out, "riz_dict_set(_t%d.as.dict, %s, %s);\n", t, key_safe, val);
+                int k = new_tmp();
+                ind(); fprintf(G.out, "RizValue _t%d = %s;\n", k, key_safe);
+                ind(); fprintf(G.out, "char* _k%d = _t%d.type == VAL_STRING ? riz_strdup(_t%d.as.string) : riz_value_to_string(_t%d);\n", k, k, k, k);
+                ind(); fprintf(G.out, "riz_dict_set(_t%d.as.dict, _k%d, %s);\n", t, k, val);
+                ind(); fprintf(G.out, "free(_k%d);\n", k);
             }
             last_expr_type = AOT_DYN;
             char* b = get_temp_buf();
@@ -697,7 +701,7 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
 
     emit_fn_bodies(program);
     
-    fprintf(G.out, "int main(void) {\n");
+    fprintf(G.out, "int main(int argc, char** argv) {\n");
     G.indent = 1;
     ind(); fprintf(G.out, "riz_enable_ansi();\n");
     ind(); fprintf(G.out, "char src_path[512];\n");
@@ -710,6 +714,7 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
     ind(); fprintf(G.out, "char* suffix = strstr(src_path, \"_aot.c\");\n");
     ind(); fprintf(G.out, "if (suffix) strcpy(suffix, \".riz\");\n");
     ind(); fprintf(G.out, "aot_source_path = src_path;\n");
+    ind(); fprintf(G.out, "riz_runtime_set_cli_context(src_path, argc > 1 ? argc - 1 : 0, argc > 1 ? argv + 1 : NULL);\n");
     ind(); fprintf(G.out, "aot_setup_builtins();\n");
     emit_fn_registrations(program);
     

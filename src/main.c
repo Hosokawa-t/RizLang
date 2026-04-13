@@ -164,11 +164,12 @@ static void run_source(Interpreter* interp, const char* source, bool is_repl) {
 }
 
 /* Execute a .riz file */
-static int run_file(const char* path) {
+static int run_file(const char* path, int script_argc, char** script_argv) {
     riz_import_configure(path);
     char* source = read_file(path);
     if (!source) return 1;
 
+    riz_runtime_set_cli_context(path, script_argc, script_argv);
     Interpreter* interp = interpreter_new();
     run_source(interp, source, false);
 
@@ -179,11 +180,12 @@ static int run_file(const char* path) {
 }
 
 /* Execute a .riz file via the Bytecode VM */
-static int run_file_vm(const char* path) {
+static int run_file_vm(const char* path, int script_argc, char** script_argv) {
     riz_import_configure(path);
     char* source = read_file(path);
     if (!source) return 1;
 
+    riz_runtime_set_cli_context(path, script_argc, script_argv);
     printf(COL_DIM "[VM mode] Compiling %s..." COL_RESET "\n", path);
 
     Lexer lexer;
@@ -255,13 +257,18 @@ static void print_help(void) {
     printf("    input, append, pop, abs, min, max, sum, parallel_sum, cpu_count\n");
     printf("    map, filter, format, sorted, zip, assert, debug, panic, …\n");
     printf("    clamp, sign, floor, ceil, round, all, any, bool\n");
-    printf("    ord, chr, extend, read_file, write_file, has_key\n\n");
+    printf("    ord, chr, extend, argv, argc, script_path, parse_flags\n");
+    printf("    read_file, write_file, read_lines, write_lines, parse_csv, read_csv\n");
+    printf("    parse_tsv, read_tsv, list_dir, walk_dir, glob, mkdir\n");
+    printf("    file_exists, dir_exists, cwd, getenv, basename, dirname, join_path\n");
+    printf("    json_parse, json_stringify, read_json, write_json, has_key\n\n");
 }
 
 static void run_repl(void) {
     riz_enable_ansi();
     print_banner();
 
+    riz_runtime_set_cli_context(NULL, 0, NULL);
     Interpreter* interp = interpreter_new();
     char line[RIZ_LINE_BUF_SIZE];
 
@@ -358,6 +365,10 @@ int main(int argc, char* argv[]) {
         return riz_pkg_main(argc - 2, argv + 2);
     }
 
+    if (argc >= 2 && strcmp(argv[1], "install") == 0) {
+        return riz_install_main(argc - 2, argv + 2);
+    }
+
     if (argc >= 2 && strcmp(argv[1], "env") == 0) {
         if (argc < 3) {
             fprintf(stderr, "Usage: riz env <doctor|setup|init|shell> ...  (try: riz env --help)\n");
@@ -367,40 +378,37 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc == 1) {
-        /* No arguments → REPL mode */
         run_repl();
         return 0;
     }
 
-    if (argc == 2) {
-        /* Check for flags */
-        if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-            printf("Riz %s\n", RIZ_VERSION);
-            return 0;
-        }
-        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
-            printf("Usage: riz [options] [file.riz]\n\n");
-            printf("Options:\n");
-            printf("  -v, --version    Show version\n");
-            printf("  -h, --help       Show this help\n");
-            printf("  --vm <file>      Run file via Bytecode VM (experimental)\n");
-            printf("  check [--strict] <file>  Parse + static checks; NDJSON on stdout (--strict: warnings fail)\n");
-            printf("  pkg <cmd>        Package manager (install --locked, packages.index, …)\n");
-            printf("  env <cmd>        Easy environment: doctor, setup, shell (see riz env --help)\n\n");
-            printf("If no file is given, starts the interactive REPL.\n");
-            return 0;
-        }
+    if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
+        printf("Riz %s\n", RIZ_VERSION);
+        return 0;
+    }
 
-        /* Otherwise, treat as file path */
-        return run_file(argv[1]);
+    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+        printf("Usage: riz [options] [file.riz] [args...]\n\n");
+        printf("Options:\n");
+        printf("  -v, --version         Show version\n");
+        printf("  -h, --help            Show this help\n");
+        printf("  --vm <file> [args...] Run file via Bytecode VM (experimental)\n");
+        printf("  --aot <file> [--tcc|--gcc]  Compile file to a native binary\n");
+        printf("  check [--strict] <file>     Parse + static checks; NDJSON on stdout\n");
+        printf("  install [pkg...]      Easy install: name, owner/repo, URL, path, or manifest deps\n");
+        printf("  pkg <cmd>             Package manager (install --locked, packages.index, …)\n");
+        printf("  env <cmd>             Easy environment: doctor, setup, shell (see riz env --help)\n\n");
+        printf("Script arguments are available inside Riz via argv(), argc(), script_path(), and parse_flags().\n");
+        printf("If no file is given, starts the interactive REPL.\n");
+        return 0;
     }
 
     if (argc >= 3 && strcmp(argv[1], "check") == 0) {
         return run_check_cli(argc, argv);
     }
 
-    if (argc == 3 && strcmp(argv[1], "--vm") == 0) {
-        return run_file_vm(argv[2]);
+    if (argc >= 3 && strcmp(argv[1], "--vm") == 0) {
+        return run_file_vm(argv[2], argc - 3, argv + 3);
     }
 
     /* --aot input.riz [--tcc | --gcc] : AOT compile to native binary */
@@ -477,6 +485,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    fprintf(stderr, "Usage: riz [check|--vm|--aot|env|pkg|file.riz] ...\n");
-    return 1;
+    if (argv[1][0] == '-') {
+        fprintf(stderr, "Usage: riz [check|--vm|--aot|env|pkg|install|file.riz] ...\n");
+        return 1;
+    }
+    return run_file(argv[1], argc - 2, argv + 2);
 }
