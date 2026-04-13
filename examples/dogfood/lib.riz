@@ -1,0 +1,69 @@
+fn print_banner(title) {
+    print("")
+    print("============================================================")
+    print("  " + title)
+    print("============================================================")
+}
+
+fn file_present(path) => file_exists(path)
+
+fn count_data_lines(path) {
+    let lines = read_lines(path)
+    mut count = 0
+    for line in lines {
+        let trimmed = line.trim()
+        if len(trimmed) == 0 {
+            continue
+        }
+        if trimmed.starts_with("#") {
+            continue
+        }
+        count = count + 1
+    }
+    return count
+}
+
+fn add_number(counter, key, amount) {
+    counter.set(key, counter.get(key, 0) + amount)
+}
+
+fn pairs_sorted_desc(counter) {
+    mut pairs = []
+    for item in counter.items() {
+        pairs.push([item[0], item[1]])
+    }
+
+    mut i = 1
+    while i < len(pairs) {
+        let key_pair = pairs[i]
+        let key_score = key_pair[1]
+        mut j = i - 1
+        while j >= 0 and pairs[j][1] < key_score {
+            pairs[j + 1] = pairs[j]
+            j = j - 1
+        }
+        pairs[j + 1] = key_pair
+        i = i + 1
+    }
+    return pairs
+}
+
+fn pad_right(value, width) {
+    let text = str(value)
+    let gap = width - len(text)
+    if gap <= 0 {
+        return text
+    }
+    return text + " ".repeat(gap)
+}
+
+fn percent_text(part, total) {
+    if total == 0 {
+        return "0%"
+    }
+    return format("{}%", round(float(part) * 100.0 / float(total)))
+}
+
+fn money(amount) => str(round(float(amount) * 100.0) / 100.0)
+
+fn bool_mark(value) => "yes" if value else "no"

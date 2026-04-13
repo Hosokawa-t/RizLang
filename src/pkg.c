@@ -49,6 +49,10 @@ typedef struct {
 static int git_rev_parse_head(const char* repo, char* out, size_t cap);
 
 static void ensure_dir(const char* path);
+static int cmd_init(int argc, char** argv);
+static int write_riz_json(const char* name, const char* version);
+static const char* strip_path_prefix(const char* spec);
+static bool is_git_spec(const char* spec);
 
 static bool is_http_url(const char* s) {
     if (!s || !s[0])
@@ -166,6 +170,7 @@ static void print_usage(void) {
         "  riz pkg update            Re-fetch only git dependencies\n"
         "  riz pkg sync              Write merged deps into %s \"dependencies\"\n"
         "  riz pkg tree              Print merged dependency list\n"
+        "  riz install <pkg...>      Easy install: name, owner/repo, URL, or local path\n"
         "\n"
         "Tip: `riz env setup` runs init + install + writes .riz/activate.* for PATH (see riz env --help).\n",
         RIZ_PKG_JSON, RIZ_PKG_DEPS, RIZ_PKG_INDEX_DEFAULT, RIZ_PKG_INDEX_DEFAULT, RIZ_PKG_LOCK, RIZ_PKG_JSON);
@@ -317,6 +322,233 @@ static int lookup_index_spec(const char* name, char* spec_out, size_t cap) {
     }
     fclose(f);
     return 1;
+}
+
+static void infer_project_name_from_cwd(char* out, size_t cap) {
+    char cwd[1024];
+#ifdef _WIN32
+    if (!_getcwd(cwd, (int)sizeof(cwd))) {
+        strncpy(out, "myriz", cap - 1);
+        out[cap - 1] = '\0';
+        return;
+    }
+#else
+    if (!getcwd(cwd, sizeof(cwd))) {
+        strncpy(out, "myriz", cap - 1);
+        out[cap - 1] = '\0';
+        return;
+    }
+#endif
+    const char* base = cwd;
+    const char* slash = strrchr(cwd, '/');
+    const char* bslash = strrchr(cwd, '\\');
+    if (bslash && (!slash || bslash > slash))
+        slash = bslash;
+    if (slash && slash[1])
+        base = slash + 1;
+    if (!base[0]) {
+        strncpy(out, "myriz", cap - 1);
+        out[cap - 1] = '\0';
+        return;
+    }
+    strncpy(out, base, cap - 1);
+    out[cap - 1] = '\0';
+}
+
+static int write_default_deps_file(void) {
+    FILE* f = fopen(RIZ_PKG_DEPS, "wb");
+    if (!f) {
+        fprintf(stderr, "pkg: cannot write %s\n", RIZ_PKG_DEPS);
+        return 1;
+    }
+    fprintf(f, "# name<TAB>spec — spec: local path, path:C:\\..., or git+https://...#branch\n");
+    fprintf(f, "# riz.deps overrides same package name from %s when merging\n", RIZ_PKG_JSON);
+    fclose(f);
+    return 0;
+}
+
+static void write_default_index_file(void) {
+    FILE* idx = fopen(RIZ_PKG_INDEX_DEFAULT, "wb");
+    if (!idx)
+        return;
+    fprintf(idx, "# name<TAB>git-url-or-path — used by: riz pkg add <name>\n");
+    fprintf(idx, "# packageIndex: local file, or https://... (cached under .riz/cache/)\n");
+    fprintf(idx, "# Env: RIZ_PACKAGE_INDEX, RIZ_PACKAGE_INDEX_REFRESH=1 to force re-fetch\n");
+    fclose(idx);
+}
+
+static int ensure_pkg_project_scaffold(void) {
+    bool have_json = PATH_EXISTS(RIZ_PKG_JSON);
+    bool have_deps = PATH_EXISTS(RIZ_PKG_DEPS);
+
+    if (!have_json && !have_deps) {
+        char name[256];
+        char* init_argv[1];
+        infer_project_name_from_cwd(name, sizeof(name));
+        init_argv[0] = name;
+        if (cmd_init(1, init_argv) != 0)
+            return 1;
+        printf("pkg: initialized project manifest for '%s'\n", name);
+        return 0;
+    }
+
+    if (!have_json) {
+        char name[256];
+        infer_project_name_from_cwd(name, sizeof(name));
+        if (write_riz_json(name, RIZ_VERSION) != 0)
+            return 1;
+    }
+    if (!have_deps) {
+        if (write_default_deps_file() != 0)
+            return 1;
+    }
+    if (!PATH_EXISTS(RIZ_PKG_INDEX_DEFAULT))
+        write_default_index_file();
+    ensure_dir("vendor");
+    return 0;
+}
+
+static bool is_drive_path_like(const char* s) {
+#ifdef _WIN32
+    return s && isalpha((unsigned char)s[0]) && s[1] == ':';
+#else
+    (void)s;
+    return false;
+#endif
+}
+
+static bool is_local_path_like(const char* spec) {
+    const char* s = skip_ws(spec);
+    if (strncmp(s, "path:", 5) == 0)
+        return true;
+    if (s[0] == '/' || s[0] == '\\')
+        return true;
+    if (strncmp(s, "./", 2) == 0 || strncmp(s, "../", 3) == 0 ||
+        strncmp(s, ".\\", 2) == 0 || strncmp(s, "..\\", 3) == 0)
+        return true;
+    if (is_drive_path_like(s))
+        return true;
+    if (strchr(s, '\\'))
+        return true;
+    if (PATH_EXISTS(strip_path_prefix(s)))
+        return true;
+    return false;
+}
+
+static bool is_github_shorthand(const char* spec) {
+    const char* s = skip_ws(spec);
+    size_t len = strlen(s);
+    size_t slash_at = (size_t)-1;
+
+    if (!s[0])
+        return false;
+    if (strncmp(s, "git+", 4) == 0 || strncmp(s, "git@", 4) == 0 || strstr(s, "://") != NULL)
+        return false;
+    if (strncmp(s, "path:", 5) == 0 || is_local_path_like(s))
+        return false;
+
+    for (size_t i = 0; i < len && s[i] != '#'; i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch == '/') {
+            if (slash_at != (size_t)-1)
+                return false;
+            slash_at = i;
+            continue;
+        }
+        if (!(isalnum(ch) || ch == '.' || ch == '_' || ch == '-'))
+            return false;
+    }
+    return slash_at != (size_t)-1 && slash_at > 0 && s[slash_at + 1] && s[slash_at + 1] != '#';
+}
+
+static void github_shorthand_to_git_spec(const char* spec, char* out, size_t cap) {
+    const char* s = skip_ws(spec);
+    const char* hash = strrchr(s, '#');
+    size_t base_len = hash && hash > s ? (size_t)(hash - s) : strlen(s);
+    if (hash && hash[1]) {
+        snprintf(out, cap, "git+https://github.com/%.*s.git#%s", (int)base_len, s, hash + 1);
+    } else {
+        snprintf(out, cap, "git+https://github.com/%.*s.git", (int)base_len, s);
+    }
+}
+
+static void basename_from_spec(const char* spec, char* out, size_t cap) {
+    char buf[1536];
+    const char* s = skip_ws(spec);
+    if (strncmp(s, "git+", 4) == 0)
+        s += 4;
+    strncpy(buf, s, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char* hash = strrchr(buf, '#');
+    if (hash)
+        *hash = '\0';
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '/' || buf[len - 1] == '\\')) {
+        buf[len - 1] = '\0';
+        len--;
+    }
+
+    const char* base = buf;
+    const char* slash = strrchr(buf, '/');
+    const char* bslash = strrchr(buf, '\\');
+    if (bslash && (!slash || bslash > slash))
+        slash = bslash;
+    if (slash && slash[1])
+        base = slash + 1;
+
+    strncpy(out, base, cap - 1);
+    out[cap - 1] = '\0';
+    len = strlen(out);
+    if (len > 4 && strcmp(out + len - 4, ".git") == 0)
+        out[len - 4] = '\0';
+    len = strlen(out);
+    if (len > 4 && strcmp(out + len - 4, ".riz") == 0)
+        out[len - 4] = '\0';
+    if (!out[0]) {
+        strncpy(out, "pkg", cap - 1);
+        out[cap - 1] = '\0';
+    }
+}
+
+static int resolve_dep_request(const char* raw, char* name_out, size_t name_cap, char* spec_out, size_t spec_cap) {
+    const char* eq = strchr(raw, '=');
+    if (eq && eq > raw && eq[1]) {
+        size_t name_len = (size_t)(eq - raw);
+        if (name_len >= name_cap)
+            name_len = name_cap - 1;
+        memcpy(name_out, raw, name_len);
+        name_out[name_len] = '\0';
+        raw = eq + 1;
+    } else {
+        name_out[0] = '\0';
+    }
+
+    if (is_github_shorthand(raw)) {
+        github_shorthand_to_git_spec(raw, spec_out, spec_cap);
+    } else if (name_out[0] == '\0' && !is_git_spec(raw) && !is_local_path_like(raw)) {
+        if (lookup_index_spec(raw, spec_out, spec_cap) != 0) {
+            fprintf(stderr,
+                    "pkg: no index entry for '%s' (and it is not a URL, owner/repo, or local path)\n",
+                    raw);
+            return 1;
+        }
+        if (is_github_shorthand(spec_out)) {
+            char normalized[1536];
+            github_shorthand_to_git_spec(spec_out, normalized, sizeof(normalized));
+            strncpy(spec_out, normalized, spec_cap - 1);
+            spec_out[spec_cap - 1] = '\0';
+        }
+        strncpy(name_out, raw, name_cap - 1);
+        name_out[name_cap - 1] = '\0';
+    } else {
+        strncpy(spec_out, raw, spec_cap - 1);
+        spec_out[spec_cap - 1] = '\0';
+    }
+
+    if (!name_out[0])
+        basename_from_spec(spec_out, name_out, name_cap);
+    return 0;
 }
 
 static bool split_lock_line(char* s, LockRow* row) {
@@ -888,23 +1120,9 @@ static int cmd_init(int argc, char** argv) {
 
     if (write_riz_json(name, RIZ_VERSION))
         return 1;
-
-    FILE* f = fopen(RIZ_PKG_DEPS, "wb");
-    if (!f) {
-        fprintf(stderr, "pkg: cannot write %s\n", RIZ_PKG_DEPS);
+    if (write_default_deps_file() != 0)
         return 1;
-    }
-    fprintf(f, "# name<TAB>spec — spec: local path, path:C:\\..., or git+https://...#branch\n");
-    fprintf(f, "# riz.deps overrides same package name from %s when merging\n", RIZ_PKG_JSON);
-    fclose(f);
-
-    FILE* idx = fopen(RIZ_PKG_INDEX_DEFAULT, "wb");
-    if (idx) {
-        fprintf(idx, "# name<TAB>git-url-or-path — used by: riz pkg add <name>\n");
-        fprintf(idx, "# packageIndex: local file, or https://... (cached under .riz/cache/)\n");
-        fprintf(idx, "# Env: RIZ_PACKAGE_INDEX, RIZ_PACKAGE_INDEX_REFRESH=1 to force re-fetch\n");
-        fclose(idx);
-    }
+    write_default_index_file();
 
     ensure_dir("vendor");
     printf("Created %s, %s, %s, and vendor/\n", RIZ_PKG_JSON, RIZ_PKG_DEPS, RIZ_PKG_INDEX_DEFAULT);
@@ -912,23 +1130,33 @@ static int cmd_init(int argc, char** argv) {
 }
 
 static int cmd_add(int argc, char** argv) {
+    char name_buf[256];
+    char spec_buf[1536];
+
     if (argc < 1) {
-        fprintf(stderr, "pkg: need <name> [path|git-spec]\n");
+        fprintf(stderr, "pkg: need <name|owner/repo|url|path> [path|git-spec]\n");
         return 1;
     }
-    const char* name = argv[0];
-    char spec_buf[1536];
+
+    if (ensure_pkg_project_scaffold() != 0)
+        return 1;
+
+    const char* name;
     const char* spec;
     if (argc == 1) {
-        if (lookup_index_spec(name, spec_buf, sizeof(spec_buf)) != 0) {
-            fprintf(stderr,
-                    "pkg: no index entry for '%s' (edit %s or set RIZ_PACKAGE_INDEX)\n",
-                    name, RIZ_PKG_INDEX_DEFAULT);
+        if (resolve_dep_request(argv[0], name_buf, sizeof(name_buf), spec_buf, sizeof(spec_buf)) != 0)
             return 1;
-        }
+        name = name_buf;
         spec = spec_buf;
     } else {
-        spec = argv[1];
+        name = argv[0];
+        if (is_github_shorthand(argv[1]))
+            github_shorthand_to_git_spec(argv[1], spec_buf, sizeof(spec_buf));
+        else {
+            strncpy(spec_buf, argv[1], sizeof(spec_buf) - 1);
+            spec_buf[sizeof(spec_buf) - 1] = '\0';
+        }
+        spec = spec_buf;
     }
     char dst[1024];
     VJOIN(dst, sizeof(dst), name);
@@ -1055,6 +1283,32 @@ static int cmd_tree(int argc, char** argv) {
     for (int i = 0; i < n; i++)
         printf("  %s  [%s]  %s\n", deps[i].name, is_git_spec(deps[i].spec) ? "git" : "path", deps[i].spec);
     return 0;
+}
+
+int riz_install_main(int argc, char** argv) {
+    if (argc < 1)
+        return cmd_install(0, NULL);
+
+    bool only_flags = true;
+    for (int i = 0; i < argc; i++) {
+        if (argv[i][0] != '-') {
+            only_flags = false;
+            break;
+        }
+    }
+    if (only_flags)
+        return cmd_install(argc, argv);
+
+    int errors = 0;
+    for (int i = 0; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            fprintf(stderr, "install: options cannot be mixed with package targets ('%s')\n", argv[i]);
+            return 1;
+        }
+        if (cmd_add(1, argv + i) != 0)
+            errors++;
+    }
+    return errors ? 1 : 0;
 }
 
 int riz_pkg_main(int argc, char** argv) {

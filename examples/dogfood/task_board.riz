@@ -1,0 +1,96 @@
+import "examples/dogfood/lib.riz"
+
+struct Task { id, title, owner, status, points }
+
+impl Task {
+    fn summary(self) {
+        return format("#{} {} [{} | {}pt]", self.id, self.title, self.owner, self.points)
+    }
+}
+
+fn load_tasks(path) {
+    let rows = read_tsv(path)
+    mut tasks = []
+    for row in rows {
+        tasks.push(Task(row.id, row.title, row.owner, row.status, int(row.points)))
+    }
+    return tasks
+}
+
+fn status_counts(tasks) {
+    let counts = {}
+    for task in tasks {
+        add_number(counts, task.status, 1)
+    }
+    return counts
+}
+
+fn owner_points(tasks) {
+    let totals = {}
+    for task in tasks {
+        add_number(totals, task.owner, task.points)
+    }
+    return totals
+}
+
+fn total_points(tasks) {
+    mut total = 0
+    for task in tasks {
+        total = total + task.points
+    }
+    return total
+}
+
+fn done_points(tasks) {
+    mut total = 0
+    for task in tasks {
+        if task.status == "done" {
+            total = total + task.points
+        }
+    }
+    return total
+}
+
+fn print_status_column(tasks, status) {
+    print("")
+    print(status.upper())
+    mut found = false
+    for task in tasks {
+        if task.status == status {
+            found = true
+            print("  - " + task.summary())
+        }
+    }
+    if not found {
+        print("  - (none)")
+    }
+}
+
+let cli = parse_flags()
+let data_path = cli.positionals[0] if len(cli.positionals) > 0 else cli.flags.get("path", "examples/dogfood/data/tasks.tsv")
+let only_status = cli.flags.get("status", cli.flags.get("s", "all"))
+let tasks = load_tasks(data_path)
+let counts = status_counts(tasks)
+let owner_load = owner_points(tasks)
+let total = total_points(tasks)
+let shipped = done_points(tasks)
+
+print_banner("Dogfood App 1 / Task board")
+print("Source:", data_path)
+print("Tasks:", len(tasks))
+print("Status mix:", counts)
+print("Shipped:", format("{} / {} points ({})", shipped, total, percent_text(shipped, total)))
+
+print("")
+print("Owner load")
+for pair in pairs_sorted_desc(owner_load) {
+    print("  " + pad_right(pair[0], 8) + str(pair[1]) + "pt")
+}
+
+if only_status == "all" {
+    for status in ["todo", "doing", "blocked", "done"] {
+        print_status_column(tasks, status)
+    }
+} else {
+    print_status_column(tasks, only_status)
+}

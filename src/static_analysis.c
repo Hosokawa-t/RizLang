@@ -43,11 +43,15 @@ typedef struct {
 } SACtx;
 
 static const char* const SA_BUILTINS[] = {
-    "abs", "all", "any", "append", "assert", "bool", "ceil", "chr", "clamp", "debug",
-    "enumerate", "exit", "extend", "filter", "float", "floor", "format", "has_key",
-    "input", "int", "keys", "len", "map", "max", "min", "ord", "panic", "pop",
-    "parallel_sum", "print", "py", "range", "read_file", "reversed", "round", "sign",
-    "sorted", "str", "sum", "time", "type", "values", "write_file", "zip", "cpu_count",
+    "abs", "all", "any", "append", "argc", "argv", "assert", "basename", "bool", "ceil",
+    "chr", "clamp", "cpu_count", "cwd", "debug", "dir_exists", "dirname", "enumerate",
+    "exit", "extend", "file_exists", "filter", "float", "floor", "format", "getenv",
+    "glob", "has_key", "input", "int", "join_path", "json_parse", "json_stringify",
+    "keys", "len", "list_dir", "map", "max", "min", "mkdir", "ord", "panic",
+    "parallel_sum", "parse_csv", "parse_flags", "parse_tsv", "pop", "print", "py",
+    "range", "read_csv", "read_file", "read_json", "read_lines", "read_tsv", "reversed",
+    "round", "script_path", "sign", "sorted", "str", "sum", "time", "type", "values",
+    "walk_dir", "write_file", "write_json", "write_lines", "zip",
 };
 
 static bool sa_is_builtin(const char* name) {

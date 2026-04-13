@@ -25,6 +25,7 @@ void aot_register_user_fn(const char* name, NativeFnPtr fn, int arity);
 void aot_setup_builtins(void);
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args);
 RizPluginFn aot_get_plugin_fn(const char* name);
+void riz_runtime_set_cli_context(const char* script_path, int argc, char** argv);
 
 /* AOT Math wrappers */
 static inline RizValue aot_add(RizValue a, RizValue b) {
@@ -34,6 +35,30 @@ static inline RizValue aot_add(RizValue a, RizValue b) {
             RizValue args[2] = {a, b};
             return aot_call_plugin("tensor_add", 2, args);
         }
+    }
+    if (a.type == VAL_STRING || b.type == VAL_STRING) {
+        char* left = riz_value_to_string(a);
+        char* right = riz_value_to_string(b);
+        size_t llen = strlen(left);
+        size_t rlen = strlen(right);
+        char* joined = (char*)malloc(llen + rlen + 1);
+        memcpy(joined, left, llen);
+        memcpy(joined + llen, right, rlen + 1);
+        free(left);
+        free(right);
+        return riz_string_take(joined);
+    }
+    if (a.type == VAL_LIST && b.type == VAL_LIST) {
+        RizValue out = riz_list_new();
+        for (int i = 0; i < a.as.list->count; i++) riz_list_append(out.as.list, riz_value_copy(a.as.list->items[i]));
+        for (int i = 0; i < b.as.list->count; i++) riz_list_append(out.as.list, riz_value_copy(b.as.list->items[i]));
+        return out;
+    }
+    if (a.type == VAL_DICT && b.type == VAL_DICT) {
+        RizValue out = riz_dict_new();
+        for (int i = 0; i < a.as.dict->count; i++) riz_dict_set(out.as.dict, a.as.dict->keys[i], riz_value_copy(a.as.dict->values[i]));
+        for (int i = 0; i < b.as.dict->count; i++) riz_dict_set(out.as.dict, b.as.dict->keys[i], riz_value_copy(b.as.dict->values[i]));
+        return out;
     }
     if (a.type == VAL_INT && b.type == VAL_INT) return riz_int(a.as.integer + b.as.integer);
     if (a.type == VAL_FLOAT && b.type == VAL_FLOAT) return riz_float(a.as.floating + b.as.floating);
@@ -124,6 +149,21 @@ static inline RizValue aot_index(RizValue obj, RizValue idx) {
         if (i < 0) i += obj.as.list->count;
         return riz_list_get(obj.as.list, i);
     }
+    if (obj.type == VAL_STRING && idx.type == VAL_INT) {
+        int i = (int)idx.as.integer;
+        int len = (int)strlen(obj.as.string);
+        if (i < 0) i += len;
+        if (i < 0 || i >= len) return riz_none();
+        char out[2] = { obj.as.string[i], '\0' };
+        return riz_string(out);
+    }
+    if (obj.type == VAL_DICT) {
+        if (idx.type == VAL_STRING) return riz_dict_get(obj.as.dict, idx.as.string);
+        char* key = riz_value_to_string(idx);
+        RizValue out = riz_dict_get(obj.as.dict, key);
+        free(key);
+        return out;
+    }
     return riz_none();
 }
 
@@ -162,14 +202,27 @@ static inline RizValue aot_input(int n, ...) {
 }
 
 static inline RizValue aot_member_get(RizValue obj, const char* member) {
-    if (obj.type == VAL_LIST && strcmp(member, "count") == 0) return riz_int(obj.as.list->count);
-    /* For now, simplified dynamic member get. 
-       In a full implemention, we'd lookup method in struct def or list_methods. */
+    if (obj.type == VAL_LIST && (strcmp(member, "count") == 0 || strcmp(member, "length") == 0)) {
+        return riz_int(obj.as.list->count);
+    }
+    if (obj.type == VAL_STRING && strcmp(member, "length") == 0) {
+        return riz_int((int64_t)strlen(obj.as.string));
+    }
+    if (obj.type == VAL_DICT) {
+        if (riz_dict_has(obj.as.dict, member)) return riz_dict_get(obj.as.dict, member);
+        if (strcmp(member, "count") == 0 || strcmp(member, "length") == 0) {
+            return riz_int(obj.as.dict->count);
+        }
+    }
     fprintf(stderr, "[AOT] Warning: Dynamic member get '%s' not fully integrated in runtime\n", member);
     return riz_none();
 }
 
 static inline void aot_member_set(RizValue obj, const char* member, RizValue val) {
+    if (obj.type == VAL_DICT) {
+        riz_dict_set(obj.as.dict, member, riz_value_copy(val));
+        return;
+    }
     fprintf(stderr, "[AOT] Warning: Dynamic member set '%s' not fully integrated in runtime\n", member);
 }
 struct Interpreter;

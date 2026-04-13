@@ -1,0 +1,63 @@
+import "examples/dogfood/lib.riz"
+
+struct Change { area, kind, summary }
+
+fn load_changes(path) {
+    let rows = read_tsv(path)
+    mut changes = []
+    for row in rows {
+        changes.push(Change(row.area, row.type, row.summary))
+    }
+    return changes
+}
+
+fn area_counts(changes) {
+    let counts = {}
+    for change in changes {
+        add_number(counts, change.area, 1)
+    }
+    return counts
+}
+
+fn print_section(changes, kind) {
+    print("")
+    print("## " + kind.upper())
+    mut found = false
+    for change in changes {
+        if change.kind == kind {
+            found = true
+            print("- [" + change.area + "] " + change.summary)
+        }
+    }
+    if not found {
+        print("- (none)")
+    }
+}
+
+let cli = parse_flags()
+let data_path = cli.positionals[0] if len(cli.positionals) > 0 else cli.flags.get("path", "examples/dogfood/data/changes.tsv")
+let only_kind = cli.flags.get("kind", "all")
+let changes = load_changes(data_path)
+let counts = area_counts(changes)
+
+print_banner("Dogfood App 3 / Release notes draft")
+print("# Release Notes Draft")
+print("")
+print("_generated from " + str(len(changes)) + " change rows_")
+
+if only_kind == "all" {
+    for kind in ["breaking", "feature", "fix", "docs"] {
+        print_section(changes, kind)
+    }
+} else {
+    print_section(changes, only_kind)
+}
+
+print("")
+print("## Area counts")
+for pair in pairs_sorted_desc(counts) {
+    if only_kind != "all" {
+        continue
+    }
+    print("- " + pair[0] + ": " + str(pair[1]))
+}

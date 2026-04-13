@@ -49,6 +49,9 @@ typedef struct {
 /* Register the same built-ins as the interpreter uses (for the bytecode VM globals). */
 void riz_vm_seed_builtins(Environment* env);
 
+/* Set current script path and CLI arguments for argv()/argc()/parse_flags(). */
+void riz_runtime_set_cli_context(const char* script_path, int argc, char** argv);
+
 /* Load a native .dll/.so into VM globals (same riz_plugin_init as interpreter). */
 bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path);
 

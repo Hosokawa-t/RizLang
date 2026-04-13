@@ -1,0 +1,91 @@
+import "examples/dogfood/lib.riz"
+
+struct Expense { date, category, amount, note }
+
+impl Expense {
+    fn month(self) => self.date[0:7]
+}
+
+fn load_expenses(path) {
+    let rows = read_tsv(path)
+    mut expenses = []
+    for row in rows {
+        expenses.push(Expense(row.date, row.category, float(row.amount), row.note))
+    }
+    return expenses
+}
+
+fn totals_by_category(expenses) {
+    let totals = {}
+    for expense in expenses {
+        add_number(totals, expense.category, expense.amount)
+    }
+    return totals
+}
+
+fn totals_by_month(expenses) {
+    let totals = {}
+    for expense in expenses {
+        add_number(totals, expense.month(), expense.amount)
+    }
+    return totals
+}
+
+fn total_spend(expenses) {
+    mut total = 0.0
+    for expense in expenses {
+        total = total + expense.amount
+    }
+    return total
+}
+
+let budgets = {
+    software: 120.0,
+    travel: 300.0,
+    cloud: 160.0,
+    food: 90.0,
+    equipment: 260.0,
+}
+
+let cli = parse_flags()
+let data_path = cli.positionals[0] if len(cli.positionals) > 0 else cli.flags.get("path", "examples/dogfood/data/expenses.tsv")
+let focus_category = cli.flags.get("category", "all")
+let expenses = load_expenses(data_path)
+let category_totals = totals_by_category(expenses)
+let month_totals = totals_by_month(expenses)
+
+print_banner("Dogfood App 2 / Expense report")
+print("Source:", data_path)
+print("Rows:", len(expenses))
+print("Total spend:", money(total_spend(expenses)))
+
+print("")
+print("Spend by category")
+for pair in pairs_sorted_desc(category_totals) {
+    let label = pair[0]
+    let amount = pair[1]
+    if focus_category != "all" and label != focus_category {
+        continue
+    }
+    print("  " + pad_right(label, 12) + money(amount))
+    if budgets.has(label) and amount > budgets.get(label, 0.0) {
+        let over = amount - budgets.get(label, 0.0)
+        print("    over budget by " + money(over))
+    }
+}
+
+print("")
+print("Spend by month")
+for pair in pairs_sorted_desc(month_totals) {
+    print("  " + pad_right(pair[0], 12) + money(pair[1]))
+}
+
+print("")
+print("Highest budget pressure")
+for pair in pairs_sorted_desc(category_totals) {
+    if budgets.has(pair[0]) {
+        let limit = budgets.get(pair[0], 0.0)
+        let ratio = 0.0 if limit == 0.0 else pair[1] / limit
+        print("  " + pad_right(pair[0], 12) + money(pair[1]) + " / " + money(limit) + " (" + percent_text(pair[1], limit) + ")")
+    }
+}

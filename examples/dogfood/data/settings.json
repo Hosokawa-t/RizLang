@@ -1,0 +1,10 @@
+{
+  "project": "riz",
+  "mode": "dogfood",
+  "features": [
+    "json_parse",
+    "read_json",
+    "join_path"
+  ],
+  "strict": true
+}

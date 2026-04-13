@@ -24,9 +24,13 @@
 #include <string.h>
 #include <time.h>
 #ifdef _WIN32
+#include <direct.h>
 #include <windows.h>
 #else
+#include <dirent.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
 #endif
@@ -39,9 +43,1208 @@ static RizValue call_function(Interpreter* I, RizFunction* fn, RizValue* args, i
 static void interpreter_clear_error_stack(Interpreter* I);
 static void interpreter_snapshot_error_stack(Interpreter* I);
 static Interpreter* g_interp = NULL;
+static RizValue g_cli_argv = { .type = VAL_NONE, .as = { 0 } };
+static char* g_cli_script_path = NULL;
 
 /* Forward: struct method helper */
 void riz_struct_add_method(RizStructDef* def, const char* name, RizValue fn_val);
+
+#ifdef _WIN32
+#define RIZ_PATH_SEP '\\'
+#else
+#define RIZ_PATH_SEP '/'
+#endif
+
+typedef struct {
+    char* data;
+    size_t len;
+    size_t cap;
+    bool ok;
+} RizStrBuf;
+
+typedef struct {
+    const char* cur;
+    const char* err;
+} RizJsonParser;
+
+typedef struct {
+    char** items;
+    int count;
+    int cap;
+    bool ok;
+} RizPathList;
+
+static void sb_init(RizStrBuf* sb) {
+    sb->cap = 128;
+    sb->len = 0;
+    sb->data = (char*)malloc(sb->cap);
+    sb->ok = sb->data != NULL;
+    if (sb->ok) sb->data[0] = '\0';
+}
+
+static bool sb_reserve(RizStrBuf* sb, size_t extra) {
+    if (!sb->ok) return false;
+    if (sb->len + extra + 1 <= sb->cap) return true;
+    while (sb->len + extra + 1 > sb->cap) sb->cap *= 2;
+    sb->data = (char*)realloc(sb->data, sb->cap);
+    sb->ok = sb->data != NULL;
+    return sb->ok;
+}
+
+static bool sb_append_n(RizStrBuf* sb, const char* s, size_t n) {
+    if (!sb_reserve(sb, n)) return false;
+    memcpy(sb->data + sb->len, s, n);
+    sb->len += n;
+    sb->data[sb->len] = '\0';
+    return true;
+}
+
+static bool sb_append_cstr(RizStrBuf* sb, const char* s) {
+    return sb_append_n(sb, s, strlen(s));
+}
+
+static bool sb_append_char(RizStrBuf* sb, char ch) {
+    if (!sb_reserve(sb, 1)) return false;
+    sb->data[sb->len++] = ch;
+    sb->data[sb->len] = '\0';
+    return true;
+}
+
+static bool sb_append_fmt(RizStrBuf* sb, const char* fmt, ...) {
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n < 0) return false;
+    if ((size_t)n < sizeof(buf)) return sb_append_n(sb, buf, (size_t)n);
+    if (!sb_reserve(sb, (size_t)n)) return false;
+    va_start(ap, fmt);
+    vsnprintf(sb->data + sb->len, sb->cap - sb->len, fmt, ap);
+    va_end(ap);
+    sb->len += (size_t)n;
+    return true;
+}
+
+static char* sb_take(RizStrBuf* sb) {
+    if (!sb->ok) {
+        free(sb->data);
+        return NULL;
+    }
+    return sb->data;
+}
+
+static void sb_reset(RizStrBuf* sb) {
+    if (!sb->data) return;
+    sb->len = 0;
+    sb->data[0] = '\0';
+    sb->ok = true;
+}
+
+static void path_list_init(RizPathList* list) {
+    list->items = NULL;
+    list->count = 0;
+    list->cap = 0;
+    list->ok = true;
+}
+
+static void path_list_free(RizPathList* list) {
+    if (!list) return;
+    for (int i = 0; i < list->count; i++) {
+        free(list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+    list->cap = 0;
+    list->ok = true;
+}
+
+static bool path_list_grow(RizPathList* list) {
+    if (list->count < list->cap) return true;
+    int next = list->cap < 16 ? 16 : list->cap * 2;
+    char** items = (char**)realloc(list->items, sizeof(char*) * (size_t)next);
+    if (!items) {
+        list->ok = false;
+        return false;
+    }
+    list->items = items;
+    list->cap = next;
+    return true;
+}
+
+static bool path_list_push_take(RizPathList* list, char* item) {
+    if (!list->ok) {
+        free(item);
+        return false;
+    }
+    if (!path_list_grow(list)) {
+        free(item);
+        return false;
+    }
+    list->items[list->count++] = item;
+    return true;
+}
+
+static bool path_list_push_copy(RizPathList* list, const char* item) {
+    char* copy = riz_strdup(item ? item : "");
+    if (!copy) {
+        list->ok = false;
+        return false;
+    }
+    return path_list_push_take(list, copy);
+}
+
+static int path_list_cmp(const void* a, const void* b) {
+    const char* sa = *(const char* const*)a;
+    const char* sb = *(const char* const*)b;
+    return strcmp(sa, sb);
+}
+
+static void path_list_sort(RizPathList* list) {
+    if (list->count > 1) {
+        qsort(list->items, (size_t)list->count, sizeof(char*), path_list_cmp);
+    }
+}
+
+static void path_list_dedup(RizPathList* list) {
+    int write = 0;
+    for (int read = 0; read < list->count; read++) {
+        if (write > 0 && strcmp(list->items[write - 1], list->items[read]) == 0) {
+            free(list->items[read]);
+            list->items[read] = NULL;
+            continue;
+        }
+        list->items[write++] = list->items[read];
+    }
+    list->count = write;
+}
+
+static RizValue path_list_to_riz_list(RizPathList* list) {
+    RizValue out = riz_list_new();
+    for (int i = 0; i < list->count; i++) {
+        riz_list_append(out.as.list, riz_string_take(list->items[i]));
+        list->items[i] = NULL;
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+    list->cap = 0;
+    list->ok = true;
+    return out;
+}
+
+static void cli_context_clear(void) {
+    if (g_cli_argv.type != VAL_NONE) {
+        riz_value_free(&g_cli_argv);
+    }
+    g_cli_argv = riz_none();
+    free(g_cli_script_path);
+    g_cli_script_path = NULL;
+}
+
+void riz_runtime_set_cli_context(const char* script_path, int argc, char** argv) {
+    cli_context_clear();
+    g_cli_argv = riz_list_new();
+    for (int i = 0; i < argc; i++) {
+        riz_list_append(g_cli_argv.as.list, riz_string(argv[i] ? argv[i] : ""));
+    }
+    if (script_path && script_path[0]) {
+        g_cli_script_path = riz_strdup(script_path);
+    }
+}
+
+static RizValue cli_argv_copy(void) {
+    if (g_cli_argv.type == VAL_LIST) {
+        return riz_value_copy(g_cli_argv);
+    }
+    return riz_list_new();
+}
+
+static bool path_is_sep(char ch) {
+    return ch == '/' || ch == '\\';
+}
+
+static bool path_is_absolute(const char* path) {
+    if (!path || !path[0]) return false;
+    if (path_is_sep(path[0])) return true;
+#ifdef _WIN32
+    return isalpha((unsigned char)path[0]) && path[1] == ':';
+#else
+    return false;
+#endif
+}
+
+static size_t path_root_len(const char* path) {
+    if (!path || !path[0]) return 0;
+#ifdef _WIN32
+    if (isalpha((unsigned char)path[0]) && path[1] == ':') {
+        if (path_is_sep(path[2])) return 3;
+        return 2;
+    }
+#endif
+    if (path_is_sep(path[0])) return 1;
+    return 0;
+}
+
+static bool path_is_dot_or_dotdot(const char* name) {
+    return strcmp(name, ".") == 0 || strcmp(name, "..") == 0;
+}
+
+static bool path_has_wildcards(const char* text) {
+    for (const char* p = text; *p; p++) {
+        if (*p == '*' || *p == '?') return true;
+    }
+    return false;
+}
+
+static char fold_match_char(char ch) {
+#ifdef _WIN32
+    return (char)tolower((unsigned char)ch);
+#else
+    return ch;
+#endif
+}
+
+static bool wildcard_match(const char* pattern, const char* text) {
+    while (*pattern) {
+        if (*pattern == '*') {
+            while (*pattern == '*') pattern++;
+            if (!*pattern) return true;
+            while (*text) {
+                if (wildcard_match(pattern, text)) return true;
+                text++;
+            }
+            return false;
+        }
+        if (*pattern == '?') {
+            if (!*text) return false;
+            pattern++;
+            text++;
+            continue;
+        }
+        if (fold_match_char(*pattern) != fold_match_char(*text)) return false;
+        pattern++;
+        if (!*text) return false;
+        text++;
+    }
+    return *text == '\0';
+}
+
+static char* path_join2(const char* base, const char* part) {
+    RizStrBuf sb;
+    size_t start = 0;
+    sb_init(&sb);
+    if (!part) part = "";
+    if (path_is_absolute(part)) {
+        if (!sb_append_cstr(&sb, part)) return sb_take(&sb);
+        return sb_take(&sb);
+    }
+    if (base && base[0] && strcmp(base, ".") != 0) {
+        if (!sb_append_cstr(&sb, base)) return sb_take(&sb);
+    }
+    while (part[start] && path_is_sep(part[start])) start++;
+    if (sb.len == 0) {
+        if (part[start]) {
+            if (!sb_append_cstr(&sb, part + start)) return sb_take(&sb);
+        } else if (base && base[0]) {
+            if (!sb_append_cstr(&sb, base)) return sb_take(&sb);
+        } else {
+            if (!sb_append_char(&sb, '.')) return sb_take(&sb);
+        }
+        return sb_take(&sb);
+    }
+    if (!path_is_sep(sb.data[sb.len - 1]) && part[start]) {
+        if (!sb_append_char(&sb, RIZ_PATH_SEP)) return sb_take(&sb);
+    }
+    if (part[start] && !sb_append_cstr(&sb, part + start)) return sb_take(&sb);
+    return sb_take(&sb);
+}
+
+static char* path_join_display(const char* base, const char* part) {
+    if (!base || !base[0] || strcmp(base, ".") == 0) {
+        return riz_strdup(part ? part : "");
+    }
+    return path_join2(base, part);
+}
+
+static long file_size_or_neg(FILE* f) {
+    if (fseek(f, 0, SEEK_END) != 0) return -1;
+    long n = ftell(f);
+    if (n < 0) return -1;
+    if (fseek(f, 0, SEEK_SET) != 0) return -1;
+    return n;
+}
+
+static char* read_file_alloc(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    long sz = file_size_or_neg(f);
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
+    char* buf = (char*)malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t n = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    buf[n] = '\0';
+    return buf;
+}
+
+static bool write_file_bytes(const char* path, const char* data, size_t len) {
+    FILE* f = fopen(path, "wb");
+    if (!f) return false;
+    bool ok = fwrite(data, 1, len, f) == len;
+    fclose(f);
+    return ok;
+}
+
+static bool fs_path_exists(const char* path) {
+#ifdef _WIN32
+    DWORD attr = GetFileAttributesA(path);
+    return attr != INVALID_FILE_ATTRIBUTES;
+#else
+    struct stat st;
+    return stat(path, &st) == 0;
+#endif
+}
+
+static bool fs_is_dir(const char* path) {
+#ifdef _WIN32
+    DWORD attr = GetFileAttributesA(path);
+    if (attr == INVALID_FILE_ATTRIBUTES) return false;
+    return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+#else
+    struct stat st;
+    if (stat(path, &st) != 0) return false;
+    return S_ISDIR(st.st_mode);
+#endif
+}
+
+static bool fs_is_file(const char* path) {
+    return fs_path_exists(path) && !fs_is_dir(path);
+}
+
+static bool fs_list_dir_names(const char* path, RizPathList* out, const char** err) {
+#ifdef _WIN32
+    char* pattern = path_join2(path, "*");
+    WIN32_FIND_DATAA entry;
+    HANDLE handle;
+    if (!pattern) {
+        if (err) *err = "out of memory";
+        return false;
+    }
+    handle = FindFirstFileA(pattern, &entry);
+    free(pattern);
+    if (handle == INVALID_HANDLE_VALUE) {
+        if (err) *err = "could not open directory";
+        return false;
+    }
+    do {
+        if (path_is_dot_or_dotdot(entry.cFileName)) continue;
+        if (!path_list_push_copy(out, entry.cFileName)) {
+            if (err) *err = "out of memory";
+            FindClose(handle);
+            return false;
+        }
+    } while (FindNextFileA(handle, &entry));
+    FindClose(handle);
+#else
+    DIR* dir = opendir(path);
+    if (!dir) {
+        if (err) *err = "could not open directory";
+        return false;
+    }
+    while (true) {
+        struct dirent* entry = readdir(dir);
+        if (!entry) break;
+        if (path_is_dot_or_dotdot(entry->d_name)) continue;
+        if (!path_list_push_copy(out, entry->d_name)) {
+            if (err) *err = "out of memory";
+            closedir(dir);
+            return false;
+        }
+    }
+    closedir(dir);
+#endif
+    path_list_sort(out);
+    return true;
+}
+
+static bool fs_mkdir_single(const char* path) {
+#ifdef _WIN32
+    if (CreateDirectoryA(path, NULL)) return true;
+    return fs_is_dir(path);
+#else
+    if (mkdir(path, 0755) == 0) return true;
+    if (errno == EEXIST && fs_is_dir(path)) return true;
+    return false;
+#endif
+}
+
+static bool fs_mkdir_parents(const char* path) {
+    char* work;
+    size_t len;
+    size_t root;
+    if (!path || !path[0]) return false;
+    work = riz_strdup(path);
+    if (!work) return false;
+    len = strlen(work);
+    root = path_root_len(work);
+    for (size_t i = root; i <= len; i++) {
+        if (work[i] != '\0' && !path_is_sep(work[i])) continue;
+        char saved = work[i];
+        work[i] = '\0';
+        if (work[0] &&
+            !(root == 1 && i == 1 && path_is_sep(work[0])) &&
+            !(root >= 2 && i <= root)) {
+            if (!fs_mkdir_single(work)) {
+                free(work);
+                return false;
+            }
+        }
+        if (saved == '\0') break;
+        work[i] = RIZ_PATH_SEP;
+        while (path_is_sep(work[i + 1])) i++;
+    }
+    free(work);
+    return true;
+}
+
+static bool split_path_segments(const char* pattern, char** root_out, RizPathList* segments, const char** err) {
+    size_t root_len;
+    const char* p;
+    path_list_init(segments);
+    root_len = path_root_len(pattern);
+    if (root_len > 0) {
+        *root_out = riz_strndup(pattern, root_len);
+    } else {
+        *root_out = riz_strdup(".");
+    }
+    if (!*root_out) {
+        if (err) *err = "out of memory";
+        return false;
+    }
+    p = pattern + root_len;
+    while (*p) {
+        while (path_is_sep(*p)) p++;
+        if (!*p) break;
+        const char* start = p;
+        while (*p && !path_is_sep(*p)) p++;
+        size_t len = (size_t)(p - start);
+        if (len == 1 && start[0] == '.') continue;
+        if (!path_list_push_take(segments, riz_strndup(start, len))) {
+            if (err) *err = "out of memory";
+            free(*root_out);
+            *root_out = NULL;
+            path_list_free(segments);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool walk_dir_recursive(const char* current_path, const char* display_path, RizPathList* out, const char** err) {
+    RizPathList names;
+    path_list_init(&names);
+    if (!fs_list_dir_names(current_path, &names, err)) {
+        path_list_free(&names);
+        return false;
+    }
+    for (int i = 0; i < names.count; i++) {
+        char* child_path = path_join2(current_path, names.items[i]);
+        char* child_display = path_join_display(display_path, names.items[i]);
+        bool is_dir;
+        if (!child_path || !child_display) {
+            free(child_path);
+            free(child_display);
+            path_list_free(&names);
+            if (err) *err = "out of memory";
+            return false;
+        }
+        if (!path_list_push_take(out, child_display)) {
+            free(child_path);
+            path_list_free(&names);
+            if (err) *err = "out of memory";
+            return false;
+        }
+        is_dir = fs_is_dir(child_path);
+        if (is_dir && !walk_dir_recursive(child_path, out->items[out->count - 1], out, err)) {
+            free(child_path);
+            path_list_free(&names);
+            return false;
+        }
+        free(child_path);
+    }
+    path_list_free(&names);
+    return true;
+}
+
+static bool glob_recursive(const char* current_path, const char* display_path, RizPathList* segments, int idx,
+                           RizPathList* out, const char** err) {
+    if (idx >= segments->count) {
+        const char* result = (display_path && display_path[0]) ? display_path : current_path;
+        return path_list_push_copy(out, result);
+    }
+
+    const char* seg = segments->items[idx];
+    if (strcmp(seg, "**") == 0) {
+        if (!glob_recursive(current_path, display_path, segments, idx + 1, out, err)) return false;
+        RizPathList names;
+        path_list_init(&names);
+        if (!fs_list_dir_names(current_path, &names, err)) {
+            path_list_free(&names);
+            return false;
+        }
+        for (int i = 0; i < names.count; i++) {
+            char* child_path = path_join2(current_path, names.items[i]);
+            char* child_display = path_join_display(display_path, names.items[i]);
+            bool ok = true;
+            if (!child_path || !child_display) {
+                free(child_path);
+                free(child_display);
+                path_list_free(&names);
+                if (err) *err = "out of memory";
+                return false;
+            }
+            if (fs_is_dir(child_path)) {
+                ok = glob_recursive(child_path, child_display, segments, idx, out, err);
+            }
+            free(child_path);
+            free(child_display);
+            if (!ok) {
+                path_list_free(&names);
+                return false;
+            }
+        }
+        path_list_free(&names);
+        return true;
+    }
+
+    if (!path_has_wildcards(seg)) {
+        char* child_path = path_join2(current_path, seg);
+        char* child_display = path_join_display(display_path, seg);
+        bool ok = true;
+        if (!child_path || !child_display) {
+            free(child_path);
+            free(child_display);
+            if (err) *err = "out of memory";
+            return false;
+        }
+        if (!fs_path_exists(child_path)) ok = true;
+        else if (idx == segments->count - 1) ok = path_list_push_take(out, child_display);
+        else if (fs_is_dir(child_path)) ok = glob_recursive(child_path, child_display, segments, idx + 1, out, err);
+        else ok = true;
+        if (idx != segments->count - 1 || !fs_path_exists(child_path)) free(child_display);
+        free(child_path);
+        return ok;
+    }
+
+    RizPathList names;
+    path_list_init(&names);
+    if (!fs_list_dir_names(current_path, &names, err)) {
+        path_list_free(&names);
+        return false;
+    }
+    for (int i = 0; i < names.count; i++) {
+        char* child_path;
+        char* child_display;
+        bool ok = true;
+        if (!wildcard_match(seg, names.items[i])) continue;
+        child_path = path_join2(current_path, names.items[i]);
+        child_display = path_join_display(display_path, names.items[i]);
+        if (!child_path || !child_display) {
+            free(child_path);
+            free(child_display);
+            path_list_free(&names);
+            if (err) *err = "out of memory";
+            return false;
+        }
+        if (idx == segments->count - 1) {
+            ok = path_list_push_take(out, child_display);
+        } else if (fs_is_dir(child_path)) {
+            ok = glob_recursive(child_path, child_display, segments, idx + 1, out, err);
+            free(child_display);
+        } else {
+            free(child_display);
+        }
+        free(child_path);
+        if (!ok) {
+            path_list_free(&names);
+            return false;
+        }
+    }
+    path_list_free(&names);
+    return true;
+}
+
+static bool row_is_blank(RizValue row) {
+    if (row.type != VAL_LIST) return true;
+    for (int i = 0; i < row.as.list->count; i++) {
+        RizValue item = row.as.list->items[i];
+        if (item.type == VAL_STRING && item.as.string[0] != '\0') return false;
+    }
+    return true;
+}
+
+static bool row_push_field(RizValue* row, RizStrBuf* field) {
+    char* text = riz_strdup(field->data ? field->data : "");
+    if (!text) return false;
+    riz_list_append(row->as.list, riz_string_take(text));
+    sb_reset(field);
+    return true;
+}
+
+static bool parse_delimited_rows(const char* text, char delim, RizValue* out, const char** err) {
+    RizValue rows = riz_list_new();
+    RizValue row = riz_list_new();
+    RizStrBuf field;
+    bool in_quotes = false;
+    bool pending_row = false;
+    sb_init(&field);
+    if (!field.data) {
+        riz_value_free(&rows);
+        riz_value_free(&row);
+        if (err) *err = "out of memory";
+        return false;
+    }
+    for (const char* p = text;;) {
+        char ch = *p;
+        if (in_quotes) {
+            if (ch == '\0') {
+                free(field.data);
+                riz_value_free(&rows);
+                riz_value_free(&row);
+                if (err) *err = "unterminated quoted field";
+                return false;
+            }
+            if (ch == '"') {
+                if (p[1] == '"') {
+                    if (!sb_append_char(&field, '"')) {
+                        free(field.data);
+                        riz_value_free(&rows);
+                        riz_value_free(&row);
+                        if (err) *err = "out of memory";
+                        return false;
+                    }
+                    p += 2;
+                    pending_row = true;
+                    continue;
+                }
+                in_quotes = false;
+                p++;
+                pending_row = true;
+                continue;
+            }
+            if (!sb_append_char(&field, ch)) {
+                free(field.data);
+                riz_value_free(&rows);
+                riz_value_free(&row);
+                if (err) *err = "out of memory";
+                return false;
+            }
+            p++;
+            pending_row = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_quotes = true;
+            p++;
+            pending_row = true;
+            continue;
+        }
+        if (ch == delim) {
+            if (!row_push_field(&row, &field)) {
+                free(field.data);
+                riz_value_free(&rows);
+                riz_value_free(&row);
+                if (err) *err = "out of memory";
+                return false;
+            }
+            p++;
+            pending_row = true;
+            continue;
+        }
+        if (ch == '\r' || ch == '\n' || ch == '\0') {
+            if (pending_row || field.len > 0 || row.as.list->count > 0) {
+                if (!row_push_field(&row, &field)) {
+                    free(field.data);
+                    riz_value_free(&rows);
+                    riz_value_free(&row);
+                    if (err) *err = "out of memory";
+                    return false;
+                }
+                if (!row_is_blank(row)) {
+                    riz_list_append(rows.as.list, row);
+                } else {
+                    riz_value_free(&row);
+                }
+                row = riz_list_new();
+            }
+            if (ch == '\0') break;
+            if (ch == '\r' && p[1] == '\n') p++;
+            p++;
+            pending_row = false;
+            continue;
+        }
+        if (!sb_append_char(&field, ch)) {
+            free(field.data);
+            riz_value_free(&rows);
+            riz_value_free(&row);
+            if (err) *err = "out of memory";
+            return false;
+        }
+        pending_row = true;
+        p++;
+    }
+    free(field.data);
+    riz_value_free(&row);
+    *out = rows;
+    return true;
+}
+
+static RizValue rows_to_records(RizValue rows) {
+    RizValue result = riz_list_new();
+    if (rows.type != VAL_LIST || rows.as.list->count == 0) return result;
+    RizValue header_row = rows.as.list->items[0];
+    if (header_row.type != VAL_LIST) return result;
+    for (int i = 1; i < rows.as.list->count; i++) {
+        RizValue source_row = rows.as.list->items[i];
+        RizValue record = riz_dict_new();
+        int header_count = header_row.as.list->count;
+        int row_count = source_row.type == VAL_LIST ? source_row.as.list->count : 0;
+        int col_count = header_count > row_count ? header_count : row_count;
+        for (int col = 0; col < col_count; col++) {
+            char name_buf[32];
+            const char* key = NULL;
+            RizValue value = riz_string("");
+            if (col < header_count && header_row.as.list->items[col].type == VAL_STRING &&
+                header_row.as.list->items[col].as.string[0] != '\0') {
+                key = header_row.as.list->items[col].as.string;
+            } else {
+                snprintf(name_buf, sizeof(name_buf), "col%d", col + 1);
+                key = name_buf;
+            }
+            if (source_row.type == VAL_LIST && col < row_count) {
+                riz_value_free(&value);
+                value = riz_value_copy(source_row.as.list->items[col]);
+            }
+            riz_dict_set(record.as.dict, key, value);
+        }
+        riz_list_append(result.as.list, record);
+    }
+    return result;
+}
+
+static RizValue list_from_lines(const char* text) {
+    RizValue result = riz_list_new();
+    const char* start = text;
+    const char* p = text;
+    while (*p) {
+        if (*p == '\r' || *p == '\n') {
+            size_t len = (size_t)(p - start);
+            char* line = riz_strndup(start, len);
+            riz_list_append(result.as.list, riz_string_take(line));
+            if (*p == '\r' && p[1] == '\n') p++;
+            p++;
+            start = p;
+            continue;
+        }
+        p++;
+    }
+    if (p > start) {
+        char* line = riz_strndup(start, (size_t)(p - start));
+        riz_list_append(result.as.list, riz_string_take(line));
+    }
+    return result;
+}
+
+static char* basename_dup(const char* path) {
+    size_t len = strlen(path);
+    while (len > 0 && path_is_sep(path[len - 1])) len--;
+#ifdef _WIN32
+    if (len == 2 && isalpha((unsigned char)path[0]) && path[1] == ':')
+        return riz_strndup(path, len);
+#endif
+    if (len == 0) return riz_strdup("");
+    size_t start = len;
+    while (start > 0 && !path_is_sep(path[start - 1])) start--;
+    return riz_strndup(path + start, len - start);
+}
+
+static char* dirname_dup(const char* path) {
+    size_t len = strlen(path);
+    while (len > 1 && path_is_sep(path[len - 1])) len--;
+#ifdef _WIN32
+    if (len >= 2 && isalpha((unsigned char)path[0]) && path[1] == ':') {
+        if (len == 2) return riz_strndup(path, 2);
+        if (len == 3 && path_is_sep(path[2])) return riz_strndup(path, 3);
+    }
+#endif
+    if (len == 0) return riz_strdup(".");
+    while (len > 0 && !path_is_sep(path[len - 1])) len--;
+    if (len == 0) return riz_strdup(".");
+    while (len > 1 && path_is_sep(path[len - 1])) len--;
+    return riz_strndup(path, len);
+}
+
+static const char* json_skip_ws(const char* p) {
+    while (*p && isspace((unsigned char)*p)) p++;
+    return p;
+}
+
+static bool json_hex_digit(char ch, unsigned* out) {
+    if (ch >= '0' && ch <= '9') { *out = (unsigned)(ch - '0'); return true; }
+    if (ch >= 'a' && ch <= 'f') { *out = (unsigned)(ch - 'a' + 10); return true; }
+    if (ch >= 'A' && ch <= 'F') { *out = (unsigned)(ch - 'A' + 10); return true; }
+    return false;
+}
+
+static bool json_parse_hex4(const char* s, unsigned* out) {
+    unsigned v = 0;
+    for (int i = 0; i < 4; i++) {
+        unsigned d = 0;
+        if (!json_hex_digit(s[i], &d)) return false;
+        v = (v << 4) | d;
+    }
+    *out = v;
+    return true;
+}
+
+static bool sb_append_codepoint(RizStrBuf* sb, unsigned code) {
+    if (code <= 0x7F) return sb_append_char(sb, (char)code);
+    if (code <= 0x7FF) {
+        return sb_append_char(sb, (char)(0xC0 | (code >> 6))) &&
+               sb_append_char(sb, (char)(0x80 | (code & 0x3F)));
+    }
+    if (code <= 0xFFFF) {
+        return sb_append_char(sb, (char)(0xE0 | (code >> 12))) &&
+               sb_append_char(sb, (char)(0x80 | ((code >> 6) & 0x3F))) &&
+               sb_append_char(sb, (char)(0x80 | (code & 0x3F)));
+    }
+    if (code <= 0x10FFFF) {
+        return sb_append_char(sb, (char)(0xF0 | (code >> 18))) &&
+               sb_append_char(sb, (char)(0x80 | ((code >> 12) & 0x3F))) &&
+               sb_append_char(sb, (char)(0x80 | ((code >> 6) & 0x3F))) &&
+               sb_append_char(sb, (char)(0x80 | (code & 0x3F)));
+    }
+    return false;
+}
+
+static bool json_parse_string_raw(RizJsonParser* jp, char** out) {
+    RizStrBuf sb;
+    sb_init(&sb);
+    if (*jp->cur != '"') {
+        jp->err = "expected string";
+        free(sb.data);
+        return false;
+    }
+    jp->cur++;
+    while (*jp->cur && *jp->cur != '"') {
+        if ((unsigned char)*jp->cur < 0x20) {
+            jp->err = "control character in string";
+            free(sb.data);
+            return false;
+        }
+        if (*jp->cur != '\\') {
+            if (!sb_append_char(&sb, *jp->cur++)) {
+                jp->err = "out of memory";
+                free(sb.data);
+                return false;
+            }
+            continue;
+        }
+        jp->cur++;
+        switch (*jp->cur) {
+            case '"': if (!sb_append_char(&sb, '"')) jp->err = "out of memory"; jp->cur++; break;
+            case '\\': if (!sb_append_char(&sb, '\\')) jp->err = "out of memory"; jp->cur++; break;
+            case '/': if (!sb_append_char(&sb, '/')) jp->err = "out of memory"; jp->cur++; break;
+            case 'b': if (!sb_append_char(&sb, '\b')) jp->err = "out of memory"; jp->cur++; break;
+            case 'f': if (!sb_append_char(&sb, '\f')) jp->err = "out of memory"; jp->cur++; break;
+            case 'n': if (!sb_append_char(&sb, '\n')) jp->err = "out of memory"; jp->cur++; break;
+            case 'r': if (!sb_append_char(&sb, '\r')) jp->err = "out of memory"; jp->cur++; break;
+            case 't': if (!sb_append_char(&sb, '\t')) jp->err = "out of memory"; jp->cur++; break;
+            case 'u': {
+                unsigned code = 0;
+                if (!json_parse_hex4(jp->cur + 1, &code)) {
+                    jp->err = "invalid unicode escape";
+                    free(sb.data);
+                    return false;
+                }
+                jp->cur += 5;
+                if (code >= 0xD800 && code <= 0xDBFF && jp->cur[0] == '\\' && jp->cur[1] == 'u') {
+                    unsigned low = 0;
+                    if (!json_parse_hex4(jp->cur + 2, &low) || low < 0xDC00 || low > 0xDFFF) {
+                        jp->err = "invalid unicode surrogate pair";
+                        free(sb.data);
+                        return false;
+                    }
+                    code = 0x10000 + (((code - 0xD800) << 10) | (low - 0xDC00));
+                    jp->cur += 6;
+                }
+                if (!sb_append_codepoint(&sb, code)) {
+                    jp->err = "invalid unicode codepoint";
+                    free(sb.data);
+                    return false;
+                }
+                break;
+            }
+            default:
+                jp->err = "invalid string escape";
+                free(sb.data);
+                return false;
+        }
+        if (jp->err) {
+            free(sb.data);
+            return false;
+        }
+    }
+    if (*jp->cur != '"') {
+        jp->err = "unterminated string";
+        free(sb.data);
+        return false;
+    }
+    jp->cur++;
+    *out = sb_take(&sb);
+    if (!*out) {
+        jp->err = "out of memory";
+        return false;
+    }
+    return true;
+}
+
+static bool json_parse_value(RizJsonParser* jp, RizValue* out);
+
+static bool json_parse_array(RizJsonParser* jp, RizValue* out) {
+    RizValue list = riz_list_new();
+    jp->cur++;
+    jp->cur = json_skip_ws(jp->cur);
+    if (*jp->cur == ']') {
+        jp->cur++;
+        *out = list;
+        return true;
+    }
+    while (true) {
+        RizValue item = riz_none();
+        if (!json_parse_value(jp, &item)) {
+            riz_value_free(&list);
+            return false;
+        }
+        riz_list_append(list.as.list, item);
+        jp->cur = json_skip_ws(jp->cur);
+        if (*jp->cur == ']') {
+            jp->cur++;
+            *out = list;
+            return true;
+        }
+        if (*jp->cur != ',') {
+            jp->err = "expected ',' or ']'";
+            riz_value_free(&list);
+            return false;
+        }
+        jp->cur++;
+        jp->cur = json_skip_ws(jp->cur);
+    }
+}
+
+static bool json_parse_object(RizJsonParser* jp, RizValue* out) {
+    RizValue dict = riz_dict_new();
+    jp->cur++;
+    jp->cur = json_skip_ws(jp->cur);
+    if (*jp->cur == '}') {
+        jp->cur++;
+        *out = dict;
+        return true;
+    }
+    while (true) {
+        char* key = NULL;
+        RizValue value = riz_none();
+        if (!json_parse_string_raw(jp, &key)) {
+            riz_value_free(&dict);
+            return false;
+        }
+        jp->cur = json_skip_ws(jp->cur);
+        if (*jp->cur != ':') {
+            free(key);
+            jp->err = "expected ':'";
+            riz_value_free(&dict);
+            return false;
+        }
+        jp->cur++;
+        jp->cur = json_skip_ws(jp->cur);
+        if (!json_parse_value(jp, &value)) {
+            free(key);
+            riz_value_free(&dict);
+            return false;
+        }
+        riz_dict_set(dict.as.dict, key, value);
+        free(key);
+        jp->cur = json_skip_ws(jp->cur);
+        if (*jp->cur == '}') {
+            jp->cur++;
+            *out = dict;
+            return true;
+        }
+        if (*jp->cur != ',') {
+            jp->err = "expected ',' or '}'";
+            riz_value_free(&dict);
+            return false;
+        }
+        jp->cur++;
+        jp->cur = json_skip_ws(jp->cur);
+    }
+}
+
+static bool json_parse_number(RizJsonParser* jp, RizValue* out) {
+    const char* start = jp->cur;
+    char* end = NULL;
+    double value = strtod(start, &end);
+    if (end == start) {
+        jp->err = "invalid number";
+        return false;
+    }
+    bool is_float = false;
+    for (const char* p = start; p < end; p++) {
+        if (*p == '.' || *p == 'e' || *p == 'E') {
+            is_float = true;
+            break;
+        }
+    }
+    jp->cur = end;
+    *out = is_float ? riz_float(value) : riz_int((int64_t)value);
+    return true;
+}
+
+static bool json_parse_value(RizJsonParser* jp, RizValue* out) {
+    jp->cur = json_skip_ws(jp->cur);
+    switch (*jp->cur) {
+        case '"': {
+            char* text = NULL;
+            if (!json_parse_string_raw(jp, &text)) return false;
+            *out = riz_string_take(text);
+            return true;
+        }
+        case '{':
+            return json_parse_object(jp, out);
+        case '[':
+            return json_parse_array(jp, out);
+        case 't':
+            if (strncmp(jp->cur, "true", 4) == 0) { jp->cur += 4; *out = riz_bool(true); return true; }
+            break;
+        case 'f':
+            if (strncmp(jp->cur, "false", 5) == 0) { jp->cur += 5; *out = riz_bool(false); return true; }
+            break;
+        case 'n':
+            if (strncmp(jp->cur, "null", 4) == 0) { jp->cur += 4; *out = riz_none(); return true; }
+            break;
+        case '-':
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            return json_parse_number(jp, out);
+        default:
+            break;
+    }
+    jp->err = "invalid JSON value";
+    return false;
+}
+
+static bool json_write_indent(RizStrBuf* sb, int depth) {
+    if (!sb_append_char(sb, '\n')) return false;
+    for (int i = 0; i < depth; i++) {
+        if (!sb_append_cstr(sb, "  ")) return false;
+    }
+    return true;
+}
+
+static bool json_stringify_value(RizStrBuf* sb, RizValue value, bool pretty, int depth);
+
+static bool json_escape_and_append(RizStrBuf* sb, const char* s) {
+    if (!sb_append_char(sb, '"')) return false;
+    for (const unsigned char* p = (const unsigned char*)s; *p; p++) {
+        switch (*p) {
+            case '"': if (!sb_append_cstr(sb, "\\\"")) return false; break;
+            case '\\': if (!sb_append_cstr(sb, "\\\\")) return false; break;
+            case '\b': if (!sb_append_cstr(sb, "\\b")) return false; break;
+            case '\f': if (!sb_append_cstr(sb, "\\f")) return false; break;
+            case '\n': if (!sb_append_cstr(sb, "\\n")) return false; break;
+            case '\r': if (!sb_append_cstr(sb, "\\r")) return false; break;
+            case '\t': if (!sb_append_cstr(sb, "\\t")) return false; break;
+            default:
+                if (*p < 0x20) {
+                    if (!sb_append_fmt(sb, "\\u%04x", (unsigned)*p)) return false;
+                } else if (!sb_append_char(sb, (char)*p)) {
+                    return false;
+                }
+                break;
+        }
+    }
+    return sb_append_char(sb, '"');
+}
+
+static bool json_stringify_object_fields(RizStrBuf* sb, bool pretty, int depth, int count, char** keys, RizValue* values) {
+    if (!sb_append_char(sb, '{')) return false;
+    if (count == 0) return sb_append_char(sb, '}');
+    for (int i = 0; i < count; i++) {
+        if (i > 0) {
+            if (!sb_append_char(sb, ',')) return false;
+        }
+        if (pretty && !json_write_indent(sb, depth + 1)) return false;
+        if (!json_escape_and_append(sb, keys[i])) return false;
+        if (!sb_append_cstr(sb, pretty ? ": " : ":")) return false;
+        if (!json_stringify_value(sb, values[i], pretty, depth + 1)) return false;
+    }
+    if (pretty && !json_write_indent(sb, depth)) return false;
+    return sb_append_char(sb, '}');
+}
+
+static bool json_stringify_value(RizStrBuf* sb, RizValue value, bool pretty, int depth) {
+    switch (value.type) {
+        case VAL_INT:
+            return sb_append_fmt(sb, "%lld", (long long)value.as.integer);
+        case VAL_FLOAT:
+            return sb_append_fmt(sb, "%.17g", value.as.floating);
+        case VAL_BOOL:
+            return sb_append_cstr(sb, value.as.boolean ? "true" : "false");
+        case VAL_NONE:
+            return sb_append_cstr(sb, "null");
+        case VAL_STRING:
+            return json_escape_and_append(sb, value.as.string);
+        case VAL_LIST: {
+            RizList* list = value.as.list;
+            if (!sb_append_char(sb, '[')) return false;
+            if (list->count == 0) return sb_append_char(sb, ']');
+            for (int i = 0; i < list->count; i++) {
+                if (i > 0) {
+                    if (!sb_append_char(sb, ',')) return false;
+                }
+                if (pretty && !json_write_indent(sb, depth + 1)) return false;
+                if (!json_stringify_value(sb, list->items[i], pretty, depth + 1)) return false;
+            }
+            if (pretty && !json_write_indent(sb, depth)) return false;
+            return sb_append_char(sb, ']');
+        }
+        case VAL_DICT:
+            return json_stringify_object_fields(sb, pretty, depth, value.as.dict->count,
+                                                value.as.dict->keys, value.as.dict->values);
+        case VAL_INSTANCE:
+            return json_stringify_object_fields(sb, pretty, depth, value.as.instance->def->field_count,
+                                                value.as.instance->def->field_names, value.as.instance->fields);
+        default:
+            return false;
+    }
+}
 
 /* ═══════════════════════════════════════════════════════
  *  Built-in / Native Functions (Phase 1 + Phase 2)
@@ -455,26 +1658,477 @@ RizValue native_exit(RizValue* args, int argc) {
 /* Phase 4: File I/O */
 RizValue native_read_file(RizValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_STRING) { riz_runtime_error("read_file requires 1 string argument (path)"); return riz_none(); }
-    FILE* f = fopen(args[0].as.string, "rb");
-    if (!f) return riz_none();
-    fseek(f, 0, SEEK_END);
-    long fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    char* string = (char*)malloc(fsize + 1);
-    fread(string, 1, fsize, f);
-    fclose(f);
-    string[fsize] = '\0';
+    char* string = read_file_alloc(args[0].as.string);
+    if (!string) return riz_none();
     return riz_string_take(string);
 }
 
 RizValue native_write_file(RizValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_STRING || args[1].type != VAL_STRING) { riz_runtime_error("write_file requires (path: str, content: str)"); return riz_none(); }
-    FILE* f = fopen(args[0].as.string, "wb");
-    if (!f) return riz_bool(false);
     size_t len = strlen(args[1].as.string);
-    fwrite(args[1].as.string, 1, len, f);
-    fclose(f);
-    return riz_bool(true);
+    return riz_bool(write_file_bytes(args[0].as.string, args[1].as.string, len));
+}
+
+RizValue native_read_lines(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("read_lines(path) requires 1 string argument");
+        return riz_none();
+    }
+    char* text = read_file_alloc(args[0].as.string);
+    if (!text) return riz_none();
+    RizValue result = list_from_lines(text);
+    free(text);
+    return result;
+}
+
+RizValue native_write_lines(RizValue* args, int argc) {
+    RizStrBuf sb;
+    sb_init(&sb);
+    if (argc != 2 || args[0].type != VAL_STRING || args[1].type != VAL_LIST) {
+        riz_runtime_error("write_lines(path, lines) requires (string, list)");
+        return riz_none();
+    }
+    for (int i = 0; i < args[1].as.list->count; i++) {
+        char* line = riz_value_to_string(args[1].as.list->items[i]);
+        if (i > 0) sb_append_char(&sb, '\n');
+        sb_append_cstr(&sb, line);
+        free(line);
+    }
+    char* text = sb_take(&sb);
+    if (!text) {
+        riz_runtime_error("write_lines(): out of memory");
+        return riz_none();
+    }
+    RizValue ok = riz_bool(write_file_bytes(args[0].as.string, text, strlen(text)));
+    free(text);
+    return ok;
+}
+
+RizValue native_file_exists(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("file_exists(path) requires 1 string argument");
+        return riz_none();
+    }
+    return riz_bool(fs_is_file(args[0].as.string));
+}
+
+RizValue native_dir_exists(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("dir_exists(path) requires 1 string argument");
+        return riz_none();
+    }
+    return riz_bool(fs_is_dir(args[0].as.string));
+}
+
+RizValue native_cwd(RizValue* args, int argc) {
+    char buf[1024];
+    (void)args;
+    if (argc != 0) {
+        riz_runtime_error("cwd() takes no arguments");
+        return riz_none();
+    }
+#ifdef _WIN32
+    if (!GetCurrentDirectoryA((DWORD)sizeof(buf), buf)) return riz_none();
+#else
+    if (!getcwd(buf, sizeof(buf))) return riz_none();
+#endif
+    return riz_string(buf);
+}
+
+RizValue native_getenv_fn(RizValue* args, int argc) {
+    if (argc < 1 || argc > 2 || args[0].type != VAL_STRING) {
+        riz_runtime_error("getenv(name[, default]) requires a string name");
+        return riz_none();
+    }
+    const char* value = getenv(args[0].as.string);
+    if (!value) {
+        if (argc == 2) return riz_value_copy(args[1]);
+        return riz_none();
+    }
+    return riz_string(value);
+}
+
+RizValue native_basename(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("basename(path) requires 1 string argument");
+        return riz_none();
+    }
+    char* out = basename_dup(args[0].as.string);
+    return riz_string_take(out);
+}
+
+RizValue native_dirname(RizValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("dirname(path) requires 1 string argument");
+        return riz_none();
+    }
+    char* out = dirname_dup(args[0].as.string);
+    return riz_string_take(out);
+}
+
+RizValue native_join_path(RizValue* args, int argc) {
+    RizStrBuf sb;
+    sb_init(&sb);
+    if (argc < 1) {
+        riz_runtime_error("join_path() requires at least 1 string argument");
+        return riz_none();
+    }
+    for (int i = 0; i < argc; i++) {
+        const char* part;
+        size_t start = 0;
+        if (args[i].type != VAL_STRING) {
+            riz_runtime_error("join_path() arguments must all be strings");
+            free(sb.data);
+            return riz_none();
+        }
+        part = args[i].as.string;
+        if (!part[0]) continue;
+        if (path_is_absolute(part)) {
+            sb.len = 0;
+            if (sb.data) sb.data[0] = '\0';
+            sb_append_cstr(&sb, part);
+            continue;
+        }
+        while (part[start] && path_is_sep(part[start])) start++;
+        if (sb.len > 0 && !path_is_sep(sb.data[sb.len - 1])) sb_append_char(&sb, RIZ_PATH_SEP);
+        sb_append_cstr(&sb, part + start);
+    }
+    return riz_string_take(sb_take(&sb));
+}
+
+RizValue native_json_parse(RizValue* args, int argc) {
+    RizJsonParser jp;
+    RizValue out = riz_none();
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("json_parse(text) requires 1 string argument");
+        return riz_none();
+    }
+    jp.cur = args[0].as.string;
+    jp.err = NULL;
+    if (!json_parse_value(&jp, &out)) {
+        riz_runtime_error("json_parse(): %s", jp.err ? jp.err : "invalid JSON");
+        return riz_none();
+    }
+    jp.cur = json_skip_ws(jp.cur);
+    if (*jp.cur != '\0') {
+        riz_value_free(&out);
+        riz_runtime_error("json_parse(): trailing characters");
+        return riz_none();
+    }
+    return out;
+}
+
+RizValue native_json_stringify(RizValue* args, int argc) {
+    RizStrBuf sb;
+    bool pretty;
+    if (argc < 1 || argc > 2) {
+        riz_runtime_error("json_stringify(value[, pretty]) expected");
+        return riz_none();
+    }
+    pretty = argc == 2 && riz_value_is_truthy(args[1]);
+    sb_init(&sb);
+    if (!json_stringify_value(&sb, args[0], pretty, 0)) {
+        free(sb.data);
+        riz_runtime_error("json_stringify(): unsupported value type");
+        return riz_none();
+    }
+    return riz_string_take(sb_take(&sb));
+}
+
+RizValue native_read_json(RizValue* args, int argc) {
+    RizValue text;
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("read_json(path) requires 1 string argument");
+        return riz_none();
+    }
+    text = native_read_file(args, argc);
+    if (text.type == VAL_NONE) return text;
+    RizValue parsed = native_json_parse(&text, 1);
+    riz_value_free(&text);
+    return parsed;
+}
+
+RizValue native_write_json(RizValue* args, int argc) {
+    RizValue stringify_args[2];
+    RizValue json_text;
+    if (argc < 2 || argc > 3 || args[0].type != VAL_STRING) {
+        riz_runtime_error("write_json(path, value[, pretty]) expected");
+        return riz_none();
+    }
+    stringify_args[0] = args[1];
+    if (argc == 3) stringify_args[1] = args[2];
+    json_text = native_json_stringify(stringify_args, argc == 3 ? 2 : 1);
+    if (json_text.type != VAL_STRING) return json_text;
+    RizValue write_args[2];
+    write_args[0] = args[0];
+    write_args[1] = json_text;
+    RizValue ok = native_write_file(write_args, 2);
+    riz_value_free(&json_text);
+    return ok;
+}
+
+static bool token_is_option_like(const char* token) {
+    if (!token || token[0] != '-' || token[1] == '\0') return false;
+    if (isdigit((unsigned char)token[1]) || token[1] == '.') return false;
+    return true;
+}
+
+static RizValue parse_delimited_builtin(RizValue* args, int argc, char delim, const char* name) {
+    RizValue rows = riz_none();
+    bool header = true;
+    const char* err = NULL;
+    if (argc < 1 || argc > 2 || args[0].type != VAL_STRING) {
+        riz_runtime_error("%s(text[, header]) expected", name);
+        return riz_none();
+    }
+    if (argc == 2) header = riz_value_is_truthy(args[1]);
+    if (!parse_delimited_rows(args[0].as.string, delim, &rows, &err)) {
+        riz_runtime_error("%s(): %s", name, err ? err : "parse failed");
+        return riz_none();
+    }
+    if (!header) return rows;
+    RizValue records = rows_to_records(rows);
+    riz_value_free(&rows);
+    return records;
+}
+
+static RizValue read_delimited_builtin(RizValue* args, int argc, char delim, const char* name) {
+    RizValue text;
+    if (argc < 1 || argc > 2 || args[0].type != VAL_STRING) {
+        riz_runtime_error("%s(path[, header]) expected", name);
+        return riz_none();
+    }
+    text = native_read_file(args, 1);
+    if (text.type != VAL_STRING) return text;
+    RizValue parse_args[2];
+    parse_args[0] = text;
+    if (argc == 2) parse_args[1] = args[1];
+    RizValue out = parse_delimited_builtin(parse_args, argc, delim, name);
+    riz_value_free(&text);
+    return out;
+}
+
+RizValue native_argv_fn(RizValue* args, int argc) {
+    (void)args;
+    if (argc != 0) {
+        riz_runtime_error("argv() takes no arguments");
+        return riz_none();
+    }
+    return cli_argv_copy();
+}
+
+RizValue native_argc_fn(RizValue* args, int argc) {
+    (void)args;
+    if (argc != 0) {
+        riz_runtime_error("argc() takes no arguments");
+        return riz_none();
+    }
+    if (g_cli_argv.type == VAL_LIST) return riz_int(g_cli_argv.as.list->count);
+    return riz_int(0);
+}
+
+RizValue native_script_path_fn(RizValue* args, int argc) {
+    (void)args;
+    if (argc != 0) {
+        riz_runtime_error("script_path() takes no arguments");
+        return riz_none();
+    }
+    if (!g_cli_script_path) return riz_none();
+    return riz_string(g_cli_script_path);
+}
+
+RizValue native_parse_flags(RizValue* args, int argc) {
+    RizValue raw = riz_none();
+    RizValue out = riz_dict_new();
+    RizValue flags = riz_dict_new();
+    RizValue positionals = riz_list_new();
+    bool ok = true;
+    if (argc > 1 || (argc == 1 && args[0].type != VAL_LIST)) {
+        riz_runtime_error("parse_flags([args]) expects an optional list of strings");
+        riz_value_free(&out);
+        riz_value_free(&flags);
+        riz_value_free(&positionals);
+        return riz_none();
+    }
+    raw = argc == 1 ? riz_value_copy(args[0]) : cli_argv_copy();
+    for (int i = 0; ok && i < raw.as.list->count; i++) {
+        RizValue item = raw.as.list->items[i];
+        if (item.type != VAL_STRING) {
+            riz_runtime_error("parse_flags(): every arg must be a string");
+            ok = false;
+            break;
+        }
+        const char* token = item.as.string;
+        if (strcmp(token, "--") == 0) {
+            for (int j = i + 1; j < raw.as.list->count; j++) {
+                if (raw.as.list->items[j].type != VAL_STRING) {
+                    riz_runtime_error("parse_flags(): every arg must be a string");
+                    ok = false;
+                    break;
+                }
+                riz_list_append(positionals.as.list, riz_value_copy(raw.as.list->items[j]));
+            }
+            break;
+        }
+        if (strncmp(token, "--", 2) == 0 && token[2] != '\0') {
+            const char* name = token + 2;
+            const char* eq = strchr(name, '=');
+            if (strncmp(name, "no-", 3) == 0 && name[3] != '\0') {
+                riz_dict_set(flags.as.dict, name + 3, riz_bool(false));
+                continue;
+            }
+            if (eq) {
+                char* key = riz_strndup(name, (size_t)(eq - name));
+                if (!key) { ok = false; break; }
+                riz_dict_set(flags.as.dict, key, riz_string(eq + 1));
+                free(key);
+                continue;
+            }
+            if (i + 1 < raw.as.list->count &&
+                raw.as.list->items[i + 1].type == VAL_STRING &&
+                !token_is_option_like(raw.as.list->items[i + 1].as.string)) {
+                riz_dict_set(flags.as.dict, name, riz_value_copy(raw.as.list->items[i + 1]));
+                i++;
+            } else {
+                riz_dict_set(flags.as.dict, name, riz_bool(true));
+            }
+            continue;
+        }
+        if (token[0] == '-' && token[1] != '\0') {
+            if (token[2] == '\0') {
+                char key[2] = { token[1], '\0' };
+                if (i + 1 < raw.as.list->count &&
+                    raw.as.list->items[i + 1].type == VAL_STRING &&
+                    !token_is_option_like(raw.as.list->items[i + 1].as.string)) {
+                    riz_dict_set(flags.as.dict, key, riz_value_copy(raw.as.list->items[i + 1]));
+                    i++;
+                } else {
+                    riz_dict_set(flags.as.dict, key, riz_bool(true));
+                }
+                continue;
+            }
+            if (token[2] == '=') {
+                char key[2] = { token[1], '\0' };
+                riz_dict_set(flags.as.dict, key, riz_string(token + 3));
+                continue;
+            }
+            for (int j = 1; token[j] != '\0'; j++) {
+                char key[2] = { token[j], '\0' };
+                riz_dict_set(flags.as.dict, key, riz_bool(true));
+            }
+            continue;
+        }
+        riz_list_append(positionals.as.list, riz_value_copy(item));
+    }
+    if (!ok) {
+        riz_value_free(&raw);
+        riz_value_free(&out);
+        riz_value_free(&flags);
+        riz_value_free(&positionals);
+        return riz_none();
+    }
+    riz_dict_set(out.as.dict, "raw", raw);
+    riz_dict_set(out.as.dict, "flags", flags);
+    riz_dict_set(out.as.dict, "positionals", positionals);
+    return out;
+}
+
+RizValue native_parse_csv(RizValue* args, int argc) {
+    return parse_delimited_builtin(args, argc, ',', "parse_csv");
+}
+
+RizValue native_read_csv(RizValue* args, int argc) {
+    return read_delimited_builtin(args, argc, ',', "read_csv");
+}
+
+RizValue native_parse_tsv(RizValue* args, int argc) {
+    return parse_delimited_builtin(args, argc, '\t', "parse_tsv");
+}
+
+RizValue native_read_tsv(RizValue* args, int argc) {
+    return read_delimited_builtin(args, argc, '\t', "read_tsv");
+}
+
+RizValue native_list_dir(RizValue* args, int argc) {
+    const char* path = ".";
+    RizPathList entries;
+    const char* err = NULL;
+    path_list_init(&entries);
+    if (argc > 1 || (argc == 1 && args[0].type != VAL_STRING)) {
+        riz_runtime_error("list_dir([path]) expects 0 or 1 string argument");
+        return riz_none();
+    }
+    if (argc == 1) path = args[0].as.string;
+    if (!fs_is_dir(path)) return riz_none();
+    if (!fs_list_dir_names(path, &entries, &err)) {
+        riz_runtime_error("list_dir(): %s", err ? err : "could not read directory");
+        path_list_free(&entries);
+        return riz_none();
+    }
+    return path_list_to_riz_list(&entries);
+}
+
+RizValue native_walk_dir(RizValue* args, int argc) {
+    const char* path = ".";
+    RizPathList entries;
+    const char* err = NULL;
+    path_list_init(&entries);
+    if (argc > 1 || (argc == 1 && args[0].type != VAL_STRING)) {
+        riz_runtime_error("walk_dir([path]) expects 0 or 1 string argument");
+        return riz_none();
+    }
+    if (argc == 1) path = args[0].as.string;
+    if (!fs_is_dir(path)) return riz_none();
+    if (!walk_dir_recursive(path, path, &entries, &err)) {
+        riz_runtime_error("walk_dir(): %s", err ? err : "walk failed");
+        path_list_free(&entries);
+        return riz_none();
+    }
+    return path_list_to_riz_list(&entries);
+}
+
+RizValue native_glob(RizValue* args, int argc) {
+    char* root = NULL;
+    RizPathList segments;
+    RizPathList matches;
+    const char* err = NULL;
+    path_list_init(&segments);
+    path_list_init(&matches);
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        riz_runtime_error("glob(pattern) requires 1 string argument");
+        return riz_none();
+    }
+    if (!split_path_segments(args[0].as.string, &root, &segments, &err)) {
+        riz_runtime_error("glob(): %s", err ? err : "invalid pattern");
+        path_list_free(&segments);
+        path_list_free(&matches);
+        free(root);
+        return riz_none();
+    }
+    if (!glob_recursive(root ? root : ".", root ? root : ".", &segments, 0, &matches, &err)) {
+        riz_runtime_error("glob(): %s", err ? err : "glob failed");
+        path_list_free(&segments);
+        path_list_free(&matches);
+        free(root);
+        return riz_none();
+    }
+    path_list_sort(&matches);
+    path_list_dedup(&matches);
+    path_list_free(&segments);
+    free(root);
+    return path_list_to_riz_list(&matches);
+}
+
+RizValue native_mkdir_fn(RizValue* args, int argc) {
+    bool parents = false;
+    if (argc < 1 || argc > 2 || args[0].type != VAL_STRING) {
+        riz_runtime_error("mkdir(path[, parents]) expects 1 or 2 arguments");
+        return riz_none();
+    }
+    if (argc == 2) parents = riz_value_is_truthy(args[1]);
+    if (args[0].as.string[0] == '\0') return riz_bool(false);
+    if (fs_is_dir(args[0].as.string)) return riz_bool(true);
+    return riz_bool(parents ? fs_mkdir_parents(args[0].as.string) : fs_mkdir_single(args[0].as.string));
 }
 
 RizValue native_has_key(RizValue* args, int argc) {
@@ -1098,8 +2752,33 @@ void riz_vm_seed_builtins(Environment* g) {
     env_define(g, "values",   riz_native("values",   native_values,      1), false);
     env_define(g, "assert",   riz_native("assert",   native_assert,     -1), false);
     env_define(g, "exit",     riz_native("exit",     native_exit,       -1), false);
+    env_define(g, "argv",     riz_native("argv",     native_argv_fn,     0), false);
+    env_define(g, "argc",     riz_native("argc",     native_argc_fn,     0), false);
+    env_define(g, "script_path",riz_native("script_path", native_script_path_fn, 0), false);
+    env_define(g, "parse_flags",riz_native("parse_flags", native_parse_flags, -1), false);
     env_define(g, "read_file",riz_native("read_file", native_read_file,   1), false);
     env_define(g, "write_file",riz_native("write_file", native_write_file, 2), false);
+    env_define(g, "read_lines",riz_native("read_lines", native_read_lines, 1), false);
+    env_define(g, "write_lines",riz_native("write_lines", native_write_lines, 2), false);
+    env_define(g, "parse_csv",riz_native("parse_csv", native_parse_csv,   -1), false);
+    env_define(g, "read_csv", riz_native("read_csv",  native_read_csv,    -1), false);
+    env_define(g, "parse_tsv",riz_native("parse_tsv", native_parse_tsv,   -1), false);
+    env_define(g, "read_tsv", riz_native("read_tsv",  native_read_tsv,    -1), false);
+    env_define(g, "file_exists",riz_native("file_exists", native_file_exists, 1), false);
+    env_define(g, "dir_exists",riz_native("dir_exists", native_dir_exists, 1), false);
+    env_define(g, "list_dir", riz_native("list_dir",  native_list_dir,    -1), false);
+    env_define(g, "walk_dir", riz_native("walk_dir",  native_walk_dir,    -1), false);
+    env_define(g, "glob",     riz_native("glob",      native_glob,         1), false);
+    env_define(g, "mkdir",    riz_native("mkdir",     native_mkdir_fn,    -1), false);
+    env_define(g, "cwd",      riz_native("cwd",       native_cwd,         0), false);
+    env_define(g, "getenv",   riz_native("getenv",    native_getenv_fn,  -1), false);
+    env_define(g, "basename", riz_native("basename",  native_basename,    1), false);
+    env_define(g, "dirname",  riz_native("dirname",   native_dirname,     1), false);
+    env_define(g, "join_path",riz_native("join_path", native_join_path,  -1), false);
+    env_define(g, "json_parse",riz_native("json_parse", native_json_parse, 1), false);
+    env_define(g, "json_stringify",riz_native("json_stringify", native_json_stringify, -1), false);
+    env_define(g, "read_json",riz_native("read_json", native_read_json,   1), false);
+    env_define(g, "write_json",riz_native("write_json", native_write_json, -1), false);
     env_define(g, "has_key",  riz_native("has_key",  native_has_key,     2), false);
     env_define(g, "clamp",    riz_native("clamp",    native_clamp,       3), false);
     env_define(g, "sign",     riz_native("sign",     native_sign,        1), false);

@@ -1,0 +1,38 @@
+# stdlib_power_demo.riz -- stdlib tour for CLI/path/json/csv/fs helpers
+
+let settings_path = join_path("examples", "dogfood", "data", "settings.json")
+let changes_path = join_path("examples", "dogfood", "data", "changes.tsv")
+let demo_out = join_path(".riz", "tmp", "stdlib-demo")
+let cli = parse_flags()
+
+print("cwd():", cwd())
+print("script_path():", script_path())
+print("argc():", argc())
+print("argv():", argv())
+print("parse_flags().flags:", cli.flags)
+print("dirname(settings):", dirname(settings_path))
+print("basename(settings):", basename(settings_path))
+print("file_exists(settings):", file_exists(settings_path))
+print("dir_exists(dirname):", dir_exists(dirname(settings_path)))
+
+let settings = read_json(settings_path)
+print("settings.project:", settings["project"])
+print("settings.strict:", settings["strict"])
+print("settings.features:", settings["features"])
+
+let raw = "{\"tool\":\"riz\",\"count\":3,\"ok\":true}"
+let parsed = json_parse(raw)
+print("json_parse:", parsed)
+print("json_stringify pretty:\n" + json_stringify(parsed, true))
+
+let lines = read_lines(changes_path)
+print("read_lines(changes):", len(lines))
+let change_rows = read_tsv(changes_path)
+print("read_tsv(changes):", len(change_rows))
+print("first change area:", change_rows[0].area)
+print("list_dir(examples/intro):", len(list_dir(join_path("examples", "intro"))))
+print("glob(intro/*.riz):", len(glob(join_path("examples", "intro", "*.riz"))))
+print("walk_dir(examples/dogfood/data):", len(walk_dir(join_path("examples", "dogfood", "data"))))
+print("mkdir(.riz/tmp/stdlib-demo):", mkdir(demo_out, true))
+write_json(join_path(demo_out, "snapshot.json"), {args: argv(), rows: len(change_rows)}, true)
+print("getenv('RIZ_PATH', '<unset>'):", getenv("RIZ_PATH", "<unset>"))

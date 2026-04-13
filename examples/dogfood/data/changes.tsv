@@ -1,0 +1,7 @@
+area	type	summary
+pkg	feature	Added top-level riz install shortcut for package setup
+lsp	fix	Kept diagnostics near the source file so import resolution works
+editor	fix	Aligned syntax highlighting with the lexer keyword set
+docs	docs	Documented the new package install flow in the README
+runtime	feature	Built small dogfood apps to exercise file IO and reporting workflows
+pkg	breaking	Changed the recommended entrypoint from riz pkg add to riz install
