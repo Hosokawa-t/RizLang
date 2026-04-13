@@ -69,7 +69,7 @@ static bool find_project_root(char* start_dir, char* out_root, size_t cap) {
         char candidate[1100];
         snprintf(candidate, sizeof(candidate), "%s" PATH_SEP_STR "riz.json", cur);
         if (file_readable(candidate)) {
-            strncpy(out_root, cur, cap - 1);
+            strncpy(out_root, cur, cap);
             out_root[cap - 1] = '\0';
             return true;
         }

@@ -326,22 +326,27 @@ static bool split_lock_line(char* s, LockRow* row) {
     if (!t)
         return false;
     *t = '\0';
-    strncpy(row->name, a, sizeof(row->name) - 1);
+    if (strlen(a) >= sizeof(row->name)) { /* too long for name */ }
+    strncpy(row->name, a, sizeof(row->name));
+    row->name[sizeof(row->name) - 1] = '\0';
     a = t + 1;
     t = strchr(a, '\t');
     if (!t)
         return false;
     *t = '\0';
-    strncpy(row->kind, a, sizeof(row->kind) - 1);
+    strncpy(row->kind, a, sizeof(row->kind));
+    row->kind[sizeof(row->kind) - 1] = '\0';
     a = t + 1;
     t = strchr(a, '\t');
     if (!t)
         return false;
     *t = '\0';
-    strncpy(row->spec, a, sizeof(row->spec) - 1);
+    strncpy(row->spec, a, sizeof(row->spec));
+    row->spec[sizeof(row->spec) - 1] = '\0';
     a = t + 1;
     trim_crlf(a);
-    strncpy(row->hash, a, sizeof(row->hash) - 1);
+    strncpy(row->hash, a, sizeof(row->hash));
+    row->hash[sizeof(row->hash) - 1] = '\0';
     return row->name[0] != '\0';
 }
 
