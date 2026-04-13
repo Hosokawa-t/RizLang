@@ -9,11 +9,12 @@ Run commands from the **repository root** unless noted. Import strings use paths
 | **`vm/`** | Bytecode VM (`riz --vm`), `import` smoke (`pkg_vendor_lib`) |
 | **`aot/`** | Ahead-of-time compile (`riz --aot`) |
 | **`python/`** | CPython bridge (`plugin_python.c`) |
-| **`tensor/`** | Tensor plugin (CPU dummy + training demos; PyTorch via `plugin_torch.cpp` + CMake) |
-| **`llm/`** | GGUF / llama.cpp CLI bridge (`plugin_llama_cli.c`, `LLAMA_INFER.md`) |
-| **`bench/`** | Performance-oriented loops (`pi_bench.riz`, `parallel_sum_bench.riz`, and `pi_bench.py`) |
+| **`tensor/`** | Tensor plugin (CPU dummy + training demos; includes `test_cuda.riz` / `test_inference.riz`) |
+| **`llm/`** | GGUF / llama.cpp CLI bridge (`plugin_llama_cli.c`, `LLAMA_INFER.md`, `chat_demo.riz`) |
+| **`bench/`** | Performance-oriented loops (`pi_bench.riz`, `parallel_sum_bench.riz`, `bench_gpu.riz`, `bench_gpu.py`) |
+| **`syntax/`** | Tiny parser/truthiness smoke snippets (`test_if*.riz`) |
 
-Folders **`intro/`**, **`vm/`**, **`aot/`**, **`python/`**, **`tensor/`**, and **`llm/`** each ship a minimal **`starter.riz`** you can copy into your own project. **`bench/`** holds timing loops (`pi_bench.riz`, `parallel_sum_bench.riz`, `pi_bench.py`) instead.
+Folders **`intro/`**, **`vm/`**, **`aot/`**, **`python/`**, **`tensor/`**, and **`llm/`** each ship a minimal **`starter.riz`** you can copy into your own project. **`bench/`** holds timing loops and cross-language benchmark pairs, while **`syntax/`** keeps tiny parse/truthiness smoke snippets.
 
 ---
 
@@ -62,6 +63,17 @@ riz examples/tensor/starter.riz
 # Windows: see build_llama_cli_plugin.bat
 riz examples/llm/starter.riz
 # Full flow: examples/llm/LLAMA_INFER.md and examples/llm/infer_llama.riz
+# Interactive chat demo (prepare tools/llama_test/bin and model first)
+riz examples/llm/chat_demo.riz
+```
+
+**Benchmarks**
+
+```bash
+riz examples/bench/pi_bench.riz
+riz examples/bench/parallel_sum_bench.riz
+riz examples/bench/bench_gpu.riz
+python examples/bench/bench_gpu.py
 ```
 
 **Parse-check every `.riz` under `examples/`**
@@ -78,6 +90,7 @@ bash tools/check_examples.sh
 - **入門**は `intro/`（`starter.riz`・`hello.riz`・`import_demo.riz` と `math.riz`）。
 - **VM**は `vm/`。`vm_import_client.riz` は `examples/vm/pkg_vendor_lib.riz` を import する例です。
 - **AOT**は `aot/`。**Python / テンソル / LLM** は各フォルダの `starter.riz` と README コメントが最短ルートです。
-- **ベンチマーク**は `bench/`（`pi_bench.riz` と同じディレクトリに `pi_bench.py` あり）。
+- **ベンチマーク**は `bench/`（`bench_gpu.riz` / `bench_gpu.py` を含む）。
+- **小さな文法スモーク**は `syntax/`（`test_if*.riz`）。
 
 Built-ins の一覧はリポジトリ直下の **`README.md`** の「Built-in Functions」を参照してください。

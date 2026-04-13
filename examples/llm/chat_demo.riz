@@ -1,17 +1,18 @@
 import_native "plugin_llama_cli.dll"
 
-# CLI のフルパスを指定
-llama_set_cli("D:\\Riz\\tools\\llama_test\\bin\\llama-completion.exe")
-llama_set_gpu_layers(32) # GPUレイヤー数を指定（32層をVRAMへ）
+# リポジトリルートを cwd にして実行する想定
+let cli = "tools/llama_test/bin/llama-completion.exe"
+let model = "tools/llama_test/model.gguf"
 
-let model = "D:\\Riz\\examples\\mel_7b_q8_0.gguf"
+llama_set_cli(cli)
+llama_set_gpu_layers(32) # GPUレイヤー数を指定（32層をVRAMへ）
 
 print("============================================================")
 print("  Riz Native LLM Chat Demo")
 print("============================================================")
-print("Model: mel_7b_q8_0.gguf (8GB)")
+print("Model:", model)
 print("Note: GPU Acceleration enabled (-ngl 32)")
-print("Note: This is a large model. Loading might take some time.")
+print("Note: Put your GGUF model at tools/llama_test/model.gguf")
 print("============================================================")
 
 mut running = true

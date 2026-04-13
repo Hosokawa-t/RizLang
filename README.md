@@ -47,7 +47,8 @@ Sample programs live under **`examples/`** by use case. See **`examples/README.m
 | `examples/python/` | CPython plugin |
 | `examples/tensor/` | Tensor / training demos, optional PyTorch plugin |
 | `examples/llm/` | GGUF / llama.cpp CLI bridge |
-| `examples/bench/` | Loop benchmarks (e.g. next to `pi_bench.py`) |
+| `examples/bench/` | CPU/GPU benchmarks (`pi_bench`, `parallel_sum_bench`, `bench_gpu`) |
+| `examples/syntax/` | Tiny syntax/truthiness smoke snippets (`if` variants) |
 
 Quick smoke (from repo root):
 
