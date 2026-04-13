@@ -20,6 +20,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
+#include <dlfcn.h>
+#endif
 
 /* ═══ Forward declarations ═══ */
 
@@ -788,7 +791,6 @@ bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path) {
         return false;
     }
 #else
-    #include <dlfcn.h>
     void* lib = dlopen(path, RTLD_NOW);
     if (!lib) {
         riz_runtime_error("Failed to load native library '%s': %s", path, dlerror());
@@ -853,7 +855,6 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     }
 #else
     /* POSIX: dlopen/dlsym */
-    #include <dlfcn.h>
     void* lib = dlopen(path, RTLD_NOW);
     if (!lib) {
         riz_runtime_error("Failed to load native library '%s': %s", path, dlerror());
