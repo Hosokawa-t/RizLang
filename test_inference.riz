@@ -1,0 +1,43 @@
+import_native "plugin_torch.dll"
+
+print("========================================")
+print("  Riz GPU Inference Demo (Multi-Layer Perceptron)")
+print("========================================")
+
+if tensor_is_cuda() {
+    print("Backend: CUDA Accelerated -> ", tensor_device())
+} else {
+    print("Backend: CPU -> ", tensor_device())
+}
+
+# Network Hyperparameters
+let batch_size = 10000
+let input_dim = 2048
+let hidden_dim = 4096
+let output_dim = 128
+
+print("Network dimensions:")
+print("  Inputs:       [", batch_size, ", ", input_dim, "]")
+print("  Hidden Layer: [", input_dim, " -> ", hidden_dim, "]")
+print("  Output Layer: [", hidden_dim, " -> ", output_dim, "]")
+
+print("\n[1] Initializing Model Weights in VRAM...")
+let w1 = tensor_rand(input_dim, hidden_dim)
+let w2 = tensor_rand(hidden_dim, output_dim)
+print("  Weights initialized successfully.")
+
+print("\n[2] Loading Input Data Batch...")
+let inputs = tensor_rand(batch_size, input_dim)
+print("  Input data generated.")
+
+print("\n[3] Executing Forward Pass...")
+# Layer 1: wx + b (we'll just do wx for now since we have matmul)
+let h1 = tensor_matmul(inputs, w1)
+let h1_act = tensor_relu(h1)
+
+# Layer 2
+let logits = tensor_matmul(h1_act, w2)
+
+print("  Forward pass complete!")
+print("\nFinal Output Tensor Shape: ", tensor_shape(logits))
+print("Done. Riz is now ready for deep learning!")

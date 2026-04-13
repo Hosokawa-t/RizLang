@@ -1,0 +1,10 @@
+^D:\RIZ\BUILD_CHECK\CMAKEFILES\44755251C59273F33E10DBBA038D87CE\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Riz -BD:/Riz/build_check --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Riz/build_check/cuda_check.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

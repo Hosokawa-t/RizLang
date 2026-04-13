@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.18)
+project(cuda_check)
+
+set(CMAKE_CXX_STANDARD 17)
+set(LIBTORCH_PATH "d:/Riz/deps/libtorch")
+set(LIB_DIR "${LIBTORCH_PATH}/lib")
+
+include_directories(
+    "${LIBTORCH_PATH}/include"
+    "${LIBTORCH_PATH}/include/torch/csrc/api/include"
+)
+
+add_executable(cuda_check cuda_check.cpp)
+
+target_link_libraries(cuda_check 
+    "${LIB_DIR}/c10.lib"
+    "${LIB_DIR}/c10_cuda.lib"
+    "${LIB_DIR}/torch.lib"
+    "${LIB_DIR}/torch_cpu.lib"
+    "${LIB_DIR}/torch_cuda.lib"
+)

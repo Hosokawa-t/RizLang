@@ -27,6 +27,10 @@ gcc -Wall -Wextra -std=c11 -O2 -Isrc -o riz.exe ^
     src/riz_env.c ^
     -lm
 
+echo   Building Standard Library Plugins...
+gcc -shared -O2 -Isrc -o plugin_math.dll src/plugin_math.c -lm
+gcc -shared -O2 -Isrc -o plugin_os.dll src/plugin_os.c
+
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo   [OK] Build successful: riz.exe

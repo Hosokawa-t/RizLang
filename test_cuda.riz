@@ -1,0 +1,17 @@
+import_native "plugin_torch.dll"
+
+print("Checking CUDA support...")
+let cuda_avail = tensor_is_cuda()
+print("CUDA Available: ", cuda_avail)
+
+if cuda_avail {
+    print("Active Device: ", tensor_device())
+} else {
+    print("CUDA not found, using CPU.")
+}
+
+let a = tensor_rand(1000, 1000)
+let b = tensor_rand(1000, 1000)
+let c = tensor_matmul(a, b)
+
+print("Matmul successful. Shape: ", tensor_shape(c))

@@ -1,0 +1,36 @@
+import_native "plugin_torch"
+
+fn bench_matmul(size, iterations) {
+    if !tensor_is_cuda() {
+        print("CUDA is NOT available. Benchmarking on CPU instead.")
+    } else {
+        print(f"Device: {tensor_device()}")
+    }
+    
+    let a = tensor_randn(size, size)
+    let b = tensor_randn(size, size)
+    
+    print(f"--- Riz GPU Benchmark (MatMul {size}x{size}) ---")
+    print(f"Warmup (5 iterations)...")
+    for i in range(5) {
+        let c = tensor_matmul(a, b)
+        tensor_cuda_synchronize()
+    }
+    
+    print(f"Measuring {iterations} iterations...")
+    let start = time()
+    for i in range(iterations) {
+        let c = tensor_matmul(a, b)
+    }
+    tensor_cuda_synchronize()
+    let end = time()
+    
+    let total = end - start
+    let avg = total / iterations
+    print(f"Total time: {total:.4f} seconds")
+    print(f"Avg time:   {avg * 1000.0:.4f} milliseconds per matmul")
+    print("--------------------------------------------------")
+}
+
+# Run benchmark
+bench_matmul(512, 1000)

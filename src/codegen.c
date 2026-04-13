@@ -15,6 +15,7 @@ typedef struct {
     int   indent;
     int   tmp_counter;
     bool  had_error;
+    ASTNode* program;
 } CodeGen;
 
 static CodeGen G;
@@ -34,6 +35,35 @@ static int sym_count = 0;
 static int sym_depth = 0;
 static AOTType last_expr_type = AOT_DYN;
 static char last_expr_sname[64] = {0};
+
+/* Track unique native functions for pointer caching */
+#define MAX_AOT_NATIVE 256
+static char native_names[MAX_AOT_NATIVE][64];
+static int native_count = 0;
+
+static void track_native(const char* name) {
+    if (strcmp(name, "print") == 0 || strcmp(name, "input") == 0 || 
+        strcmp(name, "int") == 0 || strcmp(name, "float") == 0) return;
+    /* Check if it's a user function */
+    for (int i = 0; i < sym_count; i++) {
+        /* This is a bit weak since sym_table might not have the fn yet if it's defined later.
+           But in Riz all top-level fns are parsed first. */
+    }
+    for (int i = 0; i < native_count; i++) if (strcmp(native_names[i], name) == 0) return;
+    if (native_count < MAX_AOT_NATIVE) {
+        strncpy(native_names[native_count++], name, 63);
+    }
+}
+
+/* Check if a name is likely a user-defined function */
+static bool is_user_fn(const char* name) {
+    if (!G.program || G.program->type != NODE_PROGRAM) return false;
+    for (int i = 0; i < G.program->as.program.count; i++) {
+        ASTNode* d = G.program->as.program.declarations[i];
+        if (d->type == NODE_FN_DECL && strcmp(d->as.fn_decl.name, name) == 0) return true;
+    }
+    return false;
+}
 
 static void aot_push_scope(void) { sym_depth++; }
 static void aot_pop_scope(void) { 
@@ -271,6 +301,13 @@ static const char* emit_expr(ASTNode* node) {
             }
             if (node->as.call.callee->type == NODE_IDENTIFIER) {
                 const char* name = node->as.call.callee->as.identifier.name;
+                
+                /* Detect user function calls */
+                /* Note: This is an approximation. A better way would be using the sym table. */
+                bool user = false;
+                /* We'll check if it's a known user fn name from a pre-calculated list if possible, 
+                   but for now we'll just check if it matches a native name or not. */
+                   
                 if (strcmp(name, "print") == 0) {
                     ind(); fprintf(G.out, "aot_print(%d", argc);
                     for (int i = 0; i < argc; i++) fprintf(G.out, ", %s", arg_names[i]);
@@ -302,11 +339,20 @@ static const char* emit_expr(ASTNode* node) {
                     char* b = get_temp_buf(); snprintf(b, 511, "_t%d", t); return b;
                 }
 
+                if (!is_user_fn(name)) track_native(name);
                 int t = new_tmp();
                 ind(); fprintf(G.out, "RizValue _args%d[] = {", t);
                 for (int i = 0; i < argc; i++) fprintf(G.out, "%s%s", (i > 0) ? ", " : "", arg_names[i]);
                 fprintf(G.out, "%s};\n", argc==0 ? "riz_none()":"");
-                ind(); fprintf(G.out, "RizValue _t%d = aot_call_plugin(\"%s\", %d, _args%d);\n", t, name, argc, t);
+                
+                /* Self-caching dispatch: resolves the function pointer on first call, then uses fast path. */
+                if (!is_user_fn(name)) {
+                    ind(); fprintf(G.out, "if (!_fn_fast_%s) _fn_fast_%s = aot_get_plugin_fn(\"%s\");\n", name, name, name);
+                    ind(); fprintf(G.out, "RizValue _t%d = _fn_fast_%s ? _fn_fast_%s(_args%d, %d) : aot_call_plugin(\"%s\", %d, _args%d);\n", 
+                                    t, name, name, t, argc, name, argc, t);
+                } else {
+                    ind(); fprintf(G.out, "RizValue _t%d = userfn_%s(_args%d, %d);\n", t, name, t, argc);
+                }
                 last_expr_type = AOT_DYN;
                 char* b = get_temp_buf();
                 snprintf(b, 511, "_t%d", t);
@@ -543,8 +589,10 @@ static void emit_stmt(ASTNode* node) {
         }
         case NODE_BREAK_STMT: ind(); fprintf(G.out, "break;\n"); break;
         case NODE_CONTINUE_STMT: ind(); fprintf(G.out, "continue;\n"); break;
-        case NODE_IMPORT:
         case NODE_IMPORT_NATIVE:
+            ind(); fprintf(G.out, "aot_load_plugin(\"%s\");\n", node->as.import_native.path);
+            break;
+        case NODE_IMPORT:
         case NODE_STRUCT_DECL:
             ind(); fprintf(G.out, "/* [AOT skip] unsupported top-level node %d */\n", node->type);
             break;
@@ -606,10 +654,49 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
     G.out = fopen(output_path, "w");
     if (!G.out) return false;
     G.indent = 0; G.tmp_counter = 0; G.had_error = false;
+    G.program = program;
+    native_count = 0;
+    
+    /* First pass: COLLECT all native names used */
+    /* (Hack: emit to a dummy null file or just do two passes) */
+    /* Since code is small enough, we can just track them during emit. 
+       But we need native function pointers BEFORE main call. */
+    
     fprintf(G.out, "/* Generated by Riz AOT Compiler */\n#include \"%s\"\n\n", runtime_path);
+    
+    /* Pre-pass: track used natives and prototypes */
     emit_fn_prototypes(program);
+    
+    /* Pre-pass: track used natives and prototypes by doing a dummy emission. */
+    emit_fn_prototypes(program);
+    
+    /* We'll do the emission twice (the first one to a dummy file). 
+       This fills the native_names array so we can declare them at the top. */
+    FILE* real_out = G.out;
+#ifdef _WIN32
+    G.out = fopen("nul", "w");
+#else
+    G.out = fopen("/dev/null", "w");
+#endif
+    if (G.out) {
+        emit_fn_bodies(program);
+        emit_stmt(program);
+        fclose(G.out);
+    }
+    G.out = real_out;
+    G.tmp_counter = 0;
+    G.indent = 0;
+    sym_count = 0;
+    sym_depth = 0;
+
+    /* Now we have native_names filled! */
+    for (int i = 0; i < native_count; i++) {
+        fprintf(G.out, "static RizPluginFn _fn_fast_%s = NULL;\n", native_names[i]);
+    }
     fprintf(G.out, "\n");
+
     emit_fn_bodies(program);
+    
     fprintf(G.out, "int main(void) {\n");
     G.indent = 1;
     ind(); fprintf(G.out, "riz_enable_ansi();\n");
@@ -625,7 +712,10 @@ bool codegen_emit(ASTNode* program, const char* output_path, const char* runtime
     ind(); fprintf(G.out, "aot_source_path = src_path;\n");
     ind(); fprintf(G.out, "aot_setup_builtins();\n");
     emit_fn_registrations(program);
+    
+    /* Body of main */
     emit_stmt(program);
+
     ind(); fprintf(G.out, "return 0;\n}\n");
     fclose(G.out);
     return !G.had_error;

@@ -24,6 +24,7 @@ void aot_load_plugin(const char* lib_path);
 void aot_register_user_fn(const char* name, NativeFnPtr fn, int arity);
 void aot_setup_builtins(void);
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args);
+RizPluginFn aot_get_plugin_fn(const char* name);
 
 /* AOT Math wrappers */
 static inline RizValue aot_add(RizValue a, RizValue b) {

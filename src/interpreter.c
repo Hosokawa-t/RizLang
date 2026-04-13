@@ -20,8 +20,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef _WIN32
+#include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#include <sys/time.h>
 #endif
 
 /* ═══ Forward declarations ═══ */
@@ -139,6 +143,20 @@ RizValue native_sum(RizValue* a, int c) {
         else if(a[0].as.list->items[i].type==VAL_FLOAT){t+=a[0].as.list->items[i].as.floating;hf=true;}
     }
     return hf?riz_float(t):riz_int((int64_t)t);
+}
+RizValue native_time_fn(RizValue* a, int c) {
+#ifdef _WIN32
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    unsigned long long t = ft.dwHighDateTime;
+    t <<= 32;
+    t |= ft.dwLowDateTime;
+    return riz_float((double)t / 10000000.0 - 11644473600.0);
+#else
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return riz_float((double)tv.tv_sec + (double)tv.tv_usec / 1000000.0);
+#endif
 }
 
 /* Phase 2 native map/filter — forward declared */
@@ -939,6 +957,7 @@ void riz_vm_seed_builtins(Environment* g) {
     env_define(g, "extend",   riz_native("extend",   native_extend,      2), false);
     env_define(g, "debug",    riz_native("debug",    native_debug,      -1), false);
     env_define(g, "panic",    riz_native("panic",    native_panic,      -1), false);
+    env_define(g, "time",     riz_native("time",     native_time_fn,     0), false);
 }
 
 static void register_builtins(Interpreter* I) {

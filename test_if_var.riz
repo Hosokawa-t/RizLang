@@ -1,0 +1,2 @@
+let available = true
+if available { print(1) }

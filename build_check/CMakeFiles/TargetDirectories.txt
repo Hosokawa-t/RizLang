@@ -1,0 +1,3 @@
+D:/Riz/build_check/CMakeFiles/check_gpu_direct.dir
+D:/Riz/build_check/CMakeFiles/ALL_BUILD.dir
+D:/Riz/build_check/CMakeFiles/ZERO_CHECK.dir

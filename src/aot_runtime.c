@@ -141,7 +141,17 @@ void aot_load_plugin(const char* lib_path) {
 
 /* ─── FFI Dispatcher ───────────────────────────────── */
 
+RizPluginFn aot_get_plugin_fn(const char* name) {
+    for (int i = 0; i < aot_fn_count; i++) {
+        if (strcmp(aot_fns[i].name, name) == 0) {
+            return aot_fns[i].fn;
+        }
+    }
+    return NULL;
+}
+
 /* ─── Builtin setup for AOT ───────────────────────── */
+extern RizValue native_time_fn(RizValue* a, int c);
 extern RizValue native_range(RizValue* a, int c);
 extern RizValue native_len(RizValue* a, int c);
 extern RizValue native_type(RizValue* a, int c);
@@ -226,6 +236,7 @@ void aot_setup_builtins(void) {
     aot_register_user_fn("read_file", (NativeFnPtr)native_read_file, 1);
     aot_register_user_fn("write_file", (NativeFnPtr)native_write_file, 2);
     aot_register_user_fn("has_key", (NativeFnPtr)native_has_key, 2);
+    aot_register_user_fn("time", (NativeFnPtr)native_time_fn, 0);
 }
 
 RizValue aot_call_plugin(const char* name, int arg_count, RizValue* args) {

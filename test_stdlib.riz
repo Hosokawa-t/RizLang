@@ -1,0 +1,15 @@
+import_native "plugin_math.dll"
+import_native "plugin_os.dll"
+
+print("--- Testing Math ---")
+print("sin(0)    =", math.sin(0))
+print("sqrt(16)  =", math.sqrt(16))
+print("pow(2, 3) =", math.pow(2, 3))
+print("pi        =", math.pi())
+
+print("\n--- Testing OS ---")
+let cwd = os.cwd()
+print("CWD       =", cwd)
+
+let path = os.getenv("PATH")
+print("Has PATH  =", len(path) > 0)

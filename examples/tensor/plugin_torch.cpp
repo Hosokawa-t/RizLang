@@ -87,6 +87,11 @@ static RizPluginValue fn_rand(RizPluginValue* a, int n) {
     return wrap(torch::rand({r, c}, torch::kFloat32).to(get_device()));
 }
 
+static RizPluginValue fn_randn(RizPluginValue* a, int n) {
+    int r = (int)a[0].as.integer, c = (int)a[1].as.integer;
+    return wrap(torch::randn({r, c}, torch::kFloat32).to(get_device()));
+}
+
 static RizPluginValue fn_param(RizPluginValue* a, int n) {
     int r = (int)a[0].as.integer, c = (int)a[1].as.integer;
     float scale = std::sqrt(2.0f / (float)(r + c));
@@ -227,6 +232,13 @@ static RizPluginValue fn_make_sine(RizPluginValue* a, int n) {
     return list;
 }
 
+static RizPluginValue fn_cuda_synchronize(RizPluginValue* a, int n) {
+    if (torch::cuda::is_available()) {
+        torch::cuda::synchronize();
+    }
+    return G.make_none();
+}
+
 // -------------------------------------------------------------
 // Inspection
 // -------------------------------------------------------------
@@ -298,6 +310,8 @@ RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
     api->register_fn(api->interp, "tensor_shape",    fn_shape,    1);
     api->register_fn(api->interp, "tensor_print",    fn_print,    1);
     api->register_fn(api->interp, "tensor_make_sine",fn_make_sine,1);
+    api->register_fn(api->interp, "tensor_randn",    fn_randn,    2);
+    api->register_fn(api->interp, "tensor_cuda_synchronize", fn_cuda_synchronize, 0);
 }
 
 } // extern "C"
