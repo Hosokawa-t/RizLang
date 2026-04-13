@@ -15,4 +15,4 @@ copy /Y build_torch\Release\plugin_torch.dll .
 if errorlevel 1 (echo Copy FAILED & exit /b 1) else (echo Copy OK)
 
 echo === All done ===
-echo Run with: set PATH=d:\Riz\deps\libtorch\lib;%%PATH%% ^&^& riz examples\tensor\train_sine.riz
+echo Run with: set PATH=C:\Users\Owner\AppData\Local\Programs\Python\Python310\lib\site-packages\torch\lib;%%PATH%% ^&^& riz examples\tensor\train_sine.riz

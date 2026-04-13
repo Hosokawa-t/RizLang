@@ -51,7 +51,21 @@ static RizPluginValue wrap(torch::Tensor t) {
 }
 
 static torch::Device get_device() {
+    if (torch::cuda::is_available()) {
+        return torch::Device(torch::kCUDA);
+    }
     return torch::Device(torch::kCPU);
+}
+
+static RizPluginValue fn_is_cuda(RizPluginValue* a, int n) {
+    return G.make_bool(torch::cuda::is_available());
+}
+
+static RizPluginValue fn_device_name(RizPluginValue* a, int n) {
+    if (torch::cuda::is_available()) {
+        return G.make_string("cuda");
+    }
+    return G.make_string("cpu");
 }
 
 // -------------------------------------------------------------
@@ -238,11 +252,29 @@ static RizPluginValue fn_print(RizPluginValue* a, int n) {
 // Entry Point
 // -------------------------------------------------------------
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
     G = *api;
     
-    std::cout << "[PyTorch Plugin] Initialized. Using CPU." << std::endl;
+#ifdef _WIN32
+    // Force load CUDA backend DLLs to ensure initialization
+    LoadLibraryA("c10_cuda.dll");
+    LoadLibraryA("torch_cuda.dll");
+#endif
 
+    printf("[PyTorch Plugin] Initializing... (CUDA count: %d)\n", (int)torch::cuda::device_count());
+    auto device = get_device();
+    if (device.is_cuda()) {
+        printf("[PyTorch Plugin] Initialized. Using CUDA (%s).\n", device.str().c_str());
+    } else {
+        printf("[PyTorch Plugin] Initialized. Using CPU.\n");
+    }
+
+    api->register_fn(api->interp, "tensor_is_cuda",   fn_is_cuda,   0);
+    api->register_fn(api->interp, "tensor_device",    fn_device_name,0);
     api->register_fn(api->interp, "tensor_zeros",    fn_zeros,    2);
     api->register_fn(api->interp, "tensor_ones",     fn_ones,     2);
     api->register_fn(api->interp, "tensor_rand",     fn_rand,     2);

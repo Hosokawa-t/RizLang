@@ -1,0 +1,32 @@
+# GGUF GPU Inference Demo — llama.cpp (llama-completion bridge)
+#
+# Requires:
+# 1) plugin_llama_cli.dll (built via build_llama_cli_plugin.bat)
+# 2) llama-completion on your PATH
+#
+# This script forcefully offloads inference to the GPU using -ngl 99.
+
+import_native "plugin_llama_cli.dll"
+
+let model_path = "mel_7b_q8_0.gguf"
+let prompt = "Explain the concept of quantum computing in one simple sentence."
+let max_tokens = 256
+let gpu_layers = 99 # Offload all layers to GPU
+
+print("============================================================")
+print("  Riz + llama.cpp GPU Inference Demo")
+print("============================================================")
+print("")
+print("Model:", model_path)
+print("Max tokens:", max_tokens)
+print("GPU Layers:", gpu_layers)
+print("")
+
+llama_set_gpu_layers(gpu_layers)
+
+print("--- Calling llama-cli with GPU offload ---")
+let out = llama_infer(model_path, prompt, max_tokens)
+
+print(out)
+print("")
+print("--- Inference Complete ---")
