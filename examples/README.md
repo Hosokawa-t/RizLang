@@ -11,9 +11,9 @@ Run commands from the **repository root** unless noted. Import strings use paths
 | **`python/`** | CPython bridge (`plugin_python.c`) |
 | **`tensor/`** | Tensor plugin (CPU dummy + training demos; PyTorch via `plugin_torch.cpp` + CMake) |
 | **`llm/`** | GGUF / llama.cpp CLI bridge (`plugin_llama_cli.c`, `LLAMA_INFER.md`) |
-| **`bench/`** | Performance-oriented loops (compare with `pi_bench.py` next to `pi_bench.riz`) |
+| **`bench/`** | Performance-oriented loops (`pi_bench.riz`, `parallel_sum_bench.riz`, and `pi_bench.py`) |
 
-Folders **`intro/`**, **`vm/`**, **`aot/`**, **`python/`**, **`tensor/`**, and **`llm/`** each ship a minimal **`starter.riz`** you can copy into your own project. **`bench/`** holds timing loops (`pi_bench.riz` and `pi_bench.py`) instead.
+Folders **`intro/`**, **`vm/`**, **`aot/`**, **`python/`**, **`tensor/`**, and **`llm/`** each ship a minimal **`starter.riz`** you can copy into your own project. **`bench/`** holds timing loops (`pi_bench.riz`, `parallel_sum_bench.riz`, `pi_bench.py`) instead.
 
 ---
 

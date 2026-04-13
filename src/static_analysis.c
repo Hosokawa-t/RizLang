@@ -46,8 +46,8 @@ static const char* const SA_BUILTINS[] = {
     "abs", "all", "any", "append", "assert", "bool", "ceil", "chr", "clamp", "debug",
     "enumerate", "exit", "extend", "filter", "float", "floor", "format", "has_key",
     "input", "int", "keys", "len", "map", "max", "min", "ord", "panic", "pop",
-    "print", "py", "range", "read_file", "reversed", "round", "sign", "sorted",
-    "str", "sum", "type", "values", "write_file", "zip",
+    "parallel_sum", "print", "py", "range", "read_file", "reversed", "round", "sign",
+    "sorted", "str", "sum", "time", "type", "values", "write_file", "zip", "cpu_count",
 };
 
 static bool sa_is_builtin(const char* name) {

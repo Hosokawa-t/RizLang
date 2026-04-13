@@ -1,0 +1,16 @@
+let n = 5000000
+let values = range(n)
+
+let t0 = time()
+let s_serial = sum(values)
+let t1 = time()
+
+let workers = cpu_count()
+let s_parallel = parallel_sum(values, workers)
+let t2 = time()
+
+assert(s_serial == s_parallel, "parallel_sum result mismatch")
+
+print("n:", n, "workers:", workers)
+print("sum():", s_serial, "sec:", t1 - t0)
+print("parallel_sum():", s_parallel, "sec:", t2 - t1)

@@ -162,6 +162,8 @@ extern RizValue native_abs(RizValue* a, int c);
 extern RizValue native_min(RizValue* a, int c);
 extern RizValue native_max(RizValue* a, int c);
 extern RizValue native_sum(RizValue* a, int c);
+extern RizValue native_parallel_sum(RizValue* a, int c);
+extern RizValue native_cpu_count(RizValue* a, int c);
 extern RizValue native_clamp(RizValue* a, int c);
 extern RizValue native_sign(RizValue* a, int c);
 extern RizValue native_floor_fn(RizValue* a, int c);
@@ -205,6 +207,8 @@ void aot_setup_builtins(void) {
     aot_register_user_fn("min", (NativeFnPtr)native_min, -1);
     aot_register_user_fn("max", (NativeFnPtr)native_max, -1);
     aot_register_user_fn("sum", (NativeFnPtr)native_sum, 1);
+    aot_register_user_fn("parallel_sum", (NativeFnPtr)native_parallel_sum, -1);
+    aot_register_user_fn("cpu_count", (NativeFnPtr)native_cpu_count, 0);
     aot_register_user_fn("clamp", (NativeFnPtr)native_clamp, 3);
     aot_register_user_fn("sign", (NativeFnPtr)native_sign, 1);
     aot_register_user_fn("floor", (NativeFnPtr)native_floor_fn, 1);

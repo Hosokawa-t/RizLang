@@ -252,7 +252,7 @@ static void print_help(void) {
     printf("    [1,2,3] |> len()    # => 3\n\n");
     printf(COL_YELLOW "  Built-in Functions:" COL_RESET "\n");
     printf("    print, len, range, type, str, int, float\n");
-    printf("    input, append, pop, abs, min, max, sum\n");
+    printf("    input, append, pop, abs, min, max, sum, parallel_sum, cpu_count\n");
     printf("    map, filter, format, sorted, zip, assert, debug, panic, …\n");
     printf("    clamp, sign, floor, ceil, round, all, any, bool\n");
     printf("    ord, chr, extend, read_file, write_file, has_key\n\n");

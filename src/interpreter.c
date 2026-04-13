@@ -17,15 +17,18 @@
 #include "parser.h"
 #include "riz_import.h"
 #include "riz_plugin.h"
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <dlfcn.h>
 #include <sys/time.h>
+#include <unistd.h>
 #endif
 
 /* ═══ Forward declarations ═══ */
@@ -144,6 +147,158 @@ RizValue native_sum(RizValue* a, int c) {
     }
     return hf?riz_float(t):riz_int((int64_t)t);
 }
+
+typedef struct {
+    const RizValue* items;
+    int start;
+    int end;
+    double partial;
+} ParallelSumTask;
+
+static int native_cpu_count_raw(void) {
+#ifdef _WIN32
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    return (int)(info.dwNumberOfProcessors > 0 ? info.dwNumberOfProcessors : 1);
+#else
+#ifdef _SC_NPROCESSORS_ONLN
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n > 0 && n <= INT_MAX) return (int)n;
+#endif
+    return 1;
+#endif
+}
+
+static double sum_numeric_slice(const RizValue* items, int start, int end) {
+    double total = 0.0;
+    for (int i = start; i < end; i++) {
+        if (items[i].type == VAL_INT) total += (double)items[i].as.integer;
+        else total += items[i].as.floating;
+    }
+    return total;
+}
+
+static RizValue make_numeric_sum_value(double total, bool has_float) {
+    return has_float ? riz_float(total) : riz_int((int64_t)total);
+}
+
+#ifdef _WIN32
+static DWORD WINAPI parallel_sum_worker(LPVOID param) {
+    ParallelSumTask* task = (ParallelSumTask*)param;
+    task->partial = sum_numeric_slice(task->items, task->start, task->end);
+    return 0;
+}
+#endif
+
+RizValue native_cpu_count(RizValue* args, int argc) {
+    (void)args;
+    if (argc != 0) {
+        riz_runtime_error("cpu_count() takes no arguments");
+        return riz_none();
+    }
+    return riz_int((int64_t)native_cpu_count_raw());
+}
+
+RizValue native_parallel_sum(RizValue* args, int argc) {
+    if (argc < 1 || argc > 2 || args[0].type != VAL_LIST) {
+        riz_runtime_error("parallel_sum(list[, workers]) expected");
+        return riz_none();
+    }
+
+    int requested_workers = 0;
+    if (argc == 2) {
+        if (args[1].type != VAL_INT) {
+            riz_runtime_error("parallel_sum(): workers must be int");
+            return riz_none();
+        }
+        if (args[1].as.integer <= 0) {
+            riz_runtime_error("parallel_sum(): workers must be >= 1");
+            return riz_none();
+        }
+        requested_workers = (args[1].as.integer > INT_MAX) ? INT_MAX : (int)args[1].as.integer;
+    }
+
+    RizList* list = args[0].as.list;
+    if (list->count == 0) return riz_int(0);
+
+    bool has_float = false;
+    for (int i = 0; i < list->count; i++) {
+        if (list->items[i].type == VAL_INT) continue;
+        if (list->items[i].type == VAL_FLOAT) {
+            has_float = true;
+            continue;
+        }
+        riz_runtime_error("parallel_sum(): list must contain only int/float");
+        return riz_none();
+    }
+
+    int workers = requested_workers > 0 ? requested_workers : native_cpu_count_raw();
+    if (workers < 1) workers = 1;
+    if (workers > list->count) workers = list->count;
+
+    if (workers <= 1 || list->count < 4096) {
+        double total = sum_numeric_slice(list->items, 0, list->count);
+        return make_numeric_sum_value(total, has_float);
+    }
+
+#ifdef _WIN32
+    ParallelSumTask* tasks = (ParallelSumTask*)calloc((size_t)workers, sizeof(ParallelSumTask));
+    HANDLE* handles = (HANDLE*)calloc((size_t)workers, sizeof(HANDLE));
+    if (!tasks || !handles) {
+        free(tasks);
+        free(handles);
+        double total = sum_numeric_slice(list->items, 0, list->count);
+        return make_numeric_sum_value(total, has_float);
+    }
+
+    int base = list->count / workers;
+    int rem = list->count % workers;
+    int start = 0;
+    int launched = 0;
+    bool spawn_failed = false;
+
+    for (int i = 0; i < workers; i++) {
+        int span = base + (i < rem ? 1 : 0);
+        tasks[i].items = list->items;
+        tasks[i].start = start;
+        tasks[i].end = start + span;
+        start += span;
+
+        handles[i] = CreateThread(NULL, 0, parallel_sum_worker, &tasks[i], 0, NULL);
+        if (!handles[i]) {
+            spawn_failed = true;
+            break;
+        }
+        launched++;
+    }
+
+    if (spawn_failed) {
+        for (int i = 0; i < launched; i++) {
+            WaitForSingleObject(handles[i], INFINITE);
+            CloseHandle(handles[i]);
+        }
+        free(tasks);
+        free(handles);
+        double total = sum_numeric_slice(list->items, 0, list->count);
+        return make_numeric_sum_value(total, has_float);
+    }
+
+    double total = 0.0;
+    for (int i = 0; i < workers; i++) {
+        WaitForSingleObject(handles[i], INFINITE);
+        CloseHandle(handles[i]);
+        total += tasks[i].partial;
+    }
+    free(tasks);
+    free(handles);
+    return make_numeric_sum_value(total, has_float);
+#else
+    /* Non-Windows builds keep compatibility by falling back to serial sum. */
+    double total = sum_numeric_slice(list->items, 0, list->count);
+    return make_numeric_sum_value(total, has_float);
+#endif
+}
+
 RizValue native_time_fn(RizValue* a, int c) {
 #ifdef _WIN32
     FILETIME ft;
@@ -929,6 +1084,8 @@ void riz_vm_seed_builtins(Environment* g) {
     env_define(g, "min",      riz_native("min",      native_min,        -1), false);
     env_define(g, "max",      riz_native("max",      native_max,        -1), false);
     env_define(g, "sum",      riz_native("sum",      native_sum,         1), false);
+    env_define(g, "parallel_sum", riz_native("parallel_sum", native_parallel_sum, -1), false);
+    env_define(g, "cpu_count", riz_native("cpu_count", native_cpu_count, 0), false);
     env_define(g, "map",      riz_native("map",      native_map,         2), false);
     env_define(g, "filter",   riz_native("filter",   native_filter,      2), false);
     /* Phase 2 */
