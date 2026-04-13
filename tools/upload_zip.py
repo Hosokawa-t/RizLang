@@ -16,8 +16,8 @@ def create_zip():
                         
             for root, _, files in os.walk("examples"):
                 for f in files:
-                    # Skip .exe and raw .obj files, but include .riz, .cpp, .c, .md, .dll
-                    if f.endswith('.exe') or f.endswith('.obj') or f.endswith('.lib') or f.endswith('.exp'):
+                    # Skip .exe, raw .obj files, and huge .gguf models
+                    if f.endswith('.exe') or f.endswith('.obj') or f.endswith('.lib') or f.endswith('.exp') or f.endswith('.gguf'):
                         continue
                     fp = os.path.join(root, f)
                     z.write(fp, os.path.relpath(fp, '.'))
