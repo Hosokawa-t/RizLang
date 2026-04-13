@@ -378,10 +378,15 @@ static ASTNode* parse_or(Parser* P) {
 static ASTNode* parse_pipe(Parser* P) {
     ASTNode*left=parse_or(P); int line=P->previous.line;
     while(match(P,TOK_PIPE)) left=ast_pipe(left,parse_or(P),line);
-    /* Ternary: value if condition else other */
-    if (check(P, TOK_IF)) {
+    
+    /* Ternary: value if condition else other 
+       We only allow this if:
+       1. Not inside an 'if/while' condition (to avoid 'if x if y else z {' ambiguity)
+       2. The 'if' is on the SAME line as the preceding expression.
+    */
+    if (!P->is_if_condition && check(P, TOK_IF) && P->current.line == line) {
         advance_parser(P); /* consume 'if' */
-        ASTNode* cond = parse_or(P);
+        ASTNode* cond = parse_expression(P);
         consume(P, TOK_ELSE, "Expected 'else' in ternary expression");
         ASTNode* false_expr = parse_pipe(P); /* right-recursive */
         return ast_ternary(left, cond, false_expr, line);
@@ -449,7 +454,9 @@ static ASTNode* parse_block(Parser* P) {
 
 static ASTNode* parse_if_stmt(Parser* P) {
     int line=P->current.line; consume(P,TOK_IF,"Expected 'if'");
+    bool old = P->is_if_condition; P->is_if_condition = true;
     ASTNode*cond=parse_expression(P);
+    P->is_if_condition = old;
     ASTNode*then_b=parse_block(P);
     ASTNode*else_b=NULL;
     if(match(P,TOK_ELSE)){if(check(P,TOK_IF))else_b=parse_if_stmt(P);else else_b=parse_block(P);}
@@ -458,7 +465,9 @@ static ASTNode* parse_if_stmt(Parser* P) {
 
 static ASTNode* parse_while_stmt(Parser* P) {
     int line=P->current.line; consume(P,TOK_WHILE,"Expected 'while'");
+    bool old = P->is_if_condition; P->is_if_condition = true;
     ASTNode*cond=parse_expression(P);
+    P->is_if_condition = old;
     ASTNode*body=parse_block(P);
     return ast_while_stmt(cond,body,line);
 }
@@ -705,6 +714,7 @@ void parser_init(Parser* parser, Lexer* lexer) {
     parser->lexer = lexer;
     parser->had_error = false;
     parser->panic_mode = false;
+    parser->is_if_condition = false;
     advance_parser(parser);
 }
 

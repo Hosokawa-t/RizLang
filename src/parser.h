@@ -16,6 +16,7 @@ typedef struct {
     Token   previous;
     bool    had_error;
     bool    panic_mode;
+    bool    is_if_condition; /* Flag to disable ternary 'if' in 'if/while' conditions */
 } Parser;
 
 /* ─── API ─────────────────────────────────────────────── */
