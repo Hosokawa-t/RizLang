@@ -1,4 +1,4 @@
-# Riz — lightweight native scripting for AI tooling (v0.9.5)
+# Riz — lightweight native scripting for AI tooling (v0.9.6)
 
 Riz is a small, C-first language with a **tree-walking interpreter**, an experimental **register VM**, and an **AOT path** to standalone native binaries. It targets workflows where you want **C-level deployment** without giving up a script-shaped surface (imports, structs, `try`/`catch`/`throw`, plugins).
 
@@ -156,7 +156,7 @@ pwsh tools/package_windows_release.ps1
 
 **CI**: Windows ジョブが成果物 **`riz-windows-x64-zip`** をアップロードします。リリースへ載せる例:
 
-`gh release upload v0.9.5 riz-v0.9.5-windows-x64.zip --clobber`
+`gh release upload v0.9.6 riz-v0.9.6-windows-x64.zip --clobber`
 
 ## License
 
