@@ -17,7 +17,7 @@ def zipdir(path, ziph):
             ziph.write(file_path, os.path.relpath(file_path, os.path.join(path, '..')))
 
 try:
-    zip_name = 'riz_v0.9.5_official.zip'
+    zip_name = 'riz_v0.9.8_official.zip'
     with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write('riz.exe')
         # Include small plugins only
