@@ -24,7 +24,7 @@
 #include <unistd.h>
 #endif
 
-#define RIZ_VERSION "0.9.7"
+#define RIZ_VERSION "0.9.9"
 #define RIZ_MAX_ARGS 255
 #define RIZ_LINE_BUF_SIZE 1024
 #define RIZ_INITIAL_CAP 8
