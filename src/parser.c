@@ -20,12 +20,12 @@ static void advance_parser(Parser* P) {
         P->had_error = true;
     }
 }
-static bool check(Parser* P, TokenType type) { return P->current.type == type; }
-static bool match(Parser* P, TokenType type) {
+static bool check(Parser* P, RizTokenType type) { return P->current.type == type; }
+static bool match(Parser* P, RizTokenType type) {
     if (!check(P, type)) return false;
     advance_parser(P); return true;
 }
-static Token consume(Parser* P, TokenType type, const char* msg) {
+static Token consume(Parser* P, RizTokenType type, const char* msg) {
     if (P->current.type == type) { advance_parser(P); return P->previous; }
     riz_error_col(P->current.line, P->current.column, P->current.column + P->current.length,
                    "%s (got '%.*s')", msg, P->current.length, P->current.start);
@@ -332,7 +332,7 @@ static ASTNode* parse_call(Parser* P) {
 static ASTNode* parse_unary(Parser* P) {
     int line = P->current.line;
     if (match(P,TOK_MINUS)||match(P,TOK_NOT)||match(P,TOK_BANG)) {
-        TokenType op=P->previous.type; return ast_unary(op,parse_unary(P),line);
+        RizTokenType op=P->previous.type; return ast_unary(op,parse_unary(P),line);
     }
     return parse_call(P);
 }
@@ -344,25 +344,25 @@ static ASTNode* parse_power(Parser* P) {
 static ASTNode* parse_factor(Parser* P) {
     ASTNode*left=parse_power(P); int line=P->previous.line;
     while(match(P,TOK_STAR)||match(P,TOK_SLASH)||match(P,TOK_PERCENT)||match(P,TOK_FLOOR_DIV)){
-        TokenType op=P->previous.type; left=ast_binary(op,left,parse_power(P),line);}
+        RizTokenType op=P->previous.type; left=ast_binary(op,left,parse_power(P),line);}
     return left;
 }
 static ASTNode* parse_term(Parser* P) {
     ASTNode*left=parse_factor(P); int line=P->previous.line;
     while(match(P,TOK_PLUS)||match(P,TOK_MINUS)){
-        TokenType op=P->previous.type; left=ast_binary(op,left,parse_factor(P),line);}
+        RizTokenType op=P->previous.type; left=ast_binary(op,left,parse_factor(P),line);}
     return left;
 }
 static ASTNode* parse_comparison(Parser* P) {
     ASTNode*left=parse_term(P); int line=P->previous.line;
     while(match(P,TOK_LT)||match(P,TOK_GT)||match(P,TOK_LTE)||match(P,TOK_GTE)||match(P,TOK_IN)){
-        TokenType op=P->previous.type; left=ast_binary(op,left,parse_term(P),line);}
+        RizTokenType op=P->previous.type; left=ast_binary(op,left,parse_term(P),line);}
     return left;
 }
 static ASTNode* parse_equality(Parser* P) {
     ASTNode*left=parse_comparison(P); int line=P->previous.line;
     while(match(P,TOK_EQ)||match(P,TOK_NEQ)){
-        TokenType op=P->previous.type; left=ast_binary(op,left,parse_comparison(P),line);}
+        RizTokenType op=P->previous.type; left=ast_binary(op,left,parse_comparison(P),line);}
     return left;
 }
 static ASTNode* parse_and(Parser* P) {
@@ -423,7 +423,7 @@ static ASTNode* parse_assignment(Parser* P) {
     }
     if (match(P,TOK_PLUS_ASSIGN)||match(P,TOK_MINUS_ASSIGN)||
         match(P,TOK_STAR_ASSIGN)||match(P,TOK_SLASH_ASSIGN)) {
-        TokenType cop=P->previous.type; TokenType bop;
+        RizTokenType cop=P->previous.type; RizTokenType bop;
         switch(cop){case TOK_PLUS_ASSIGN:bop=TOK_PLUS;break;case TOK_MINUS_ASSIGN:bop=TOK_MINUS;break;
                     case TOK_STAR_ASSIGN:bop=TOK_STAR;break;default:bop=TOK_SLASH;break;}
         if (expr->type == NODE_IDENTIFIER) {

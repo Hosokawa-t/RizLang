@@ -42,7 +42,11 @@ static void exec_block(Interpreter* I, ASTNode* block);
 static RizValue call_function(Interpreter* I, RizFunction* fn, RizValue* args, int argc);
 static void interpreter_clear_error_stack(Interpreter* I);
 static void interpreter_snapshot_error_stack(Interpreter* I);
+#ifdef _WIN32
+static __thread Interpreter* g_interp = NULL;
+#else
 static Interpreter* g_interp = NULL;
+#endif
 static RizValue g_cli_argv = { .type = VAL_NONE, .as = { 0 } };
 static char* g_cli_script_path = NULL;
 
@@ -54,6 +58,22 @@ void riz_struct_add_method(RizStructDef* def, const char* name, RizValue fn_val)
 #else
 #define RIZ_PATH_SEP '/'
 #endif
+
+#include <stdarg.h>
+
+void riz_actual_runtime_error(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, COL_RED COL_BOLD "RuntimeError: " COL_RESET COL_RED);
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, COL_RESET "\n");
+    va_end(ap);
+
+    if (g_interp) {
+        g_interp->had_error = true;
+        longjmp(g_interp->panic_jmp, 1);
+    }
+}
 
 typedef struct {
     char* data;
@@ -1640,17 +1660,25 @@ RizValue native_panic(RizValue* args, int argc) {
     char* msg = argc >= 1 ? riz_value_to_string(args[0]) : riz_strdup("panic");
     fprintf(stderr, COL_RED COL_BOLD "panic:" COL_RESET " %s\n", msg);
     free(msg);
-    if (g_interp && g_interp->call_stack_len > 0) {
-        fprintf(stderr, COL_DIM "Call stack (innermost last):\n" COL_RESET);
-        for (int i = 0; i < g_interp->call_stack_len; i++)
-            fprintf(stderr, COL_DIM "  at %s\n" COL_RESET, g_interp->call_stack[i]);
+    if (g_interp) {
+        if (g_interp->call_stack_len > 0) {
+            fprintf(stderr, COL_DIM "Call stack (innermost last):\n" COL_RESET);
+            for (int i = 0; i < g_interp->call_stack_len; i++)
+                fprintf(stderr, COL_DIM "  at %s\n" COL_RESET, g_interp->call_stack[i]);
+        }
+        g_interp->had_error = true;
+        longjmp(g_interp->panic_jmp, 1);
     }
     exit(1);
     return riz_none();
 }
 
 RizValue native_exit(RizValue* args, int argc) {
-    int code = 0; if (argc == 1 && args[0].type == VAL_INT) code = args[0].as.integer;
+    if (g_interp) {
+        g_interp->had_error = true;
+        longjmp(g_interp->panic_jmp, 1);
+    }
+    int code = 0; if (argc == 1 && args[0].type == VAL_INT) code = (int)args[0].as.integer;
     exit(code);
     return riz_none();
 }
@@ -2528,80 +2556,108 @@ static RizValue eval_method_call(Interpreter* I, ASTNode* node) {
  * ═══════════════════════════════════════════════════════ */
 
 /* FFI API callbacks — these are passed to plugins so they can register functions */
-static void ffi_register_fn(void* interp_ptr, const char* name, RizPluginFn fn, int arity) {
+static void RIZ_API_CALL ffi_register_fn(void* interp_ptr, const char* name, RizPluginFn fn, int arity) {
+    if (!interp_ptr) return;
     Interpreter* I = (Interpreter*)interp_ptr;
     env_define(I->globals, name, riz_native(name, (NativeFnPtr)fn, arity), false);
 }
 
-static void ffi_register_fn_vm(void* interp_ptr, const char* name, RizPluginFn fn, int arity) {
+static void RIZ_API_CALL ffi_register_fn_vm(void* interp_ptr, const char* name, RizPluginFn fn, int arity) {
+    if (!interp_ptr) return;
     RizVM* vm = (RizVM*)interp_ptr;
     env_define(vm->globals, name, riz_native(name, (NativeFnPtr)fn, arity), false);
 }
 
-static RizPluginValue ffi_make_dict(void) {
+static RizValue RIZ_API_CALL ffi_make_dict(void) {
     return riz_dict_new();
 }
 
-static void ffi_dict_set_fn(RizPluginValue dict, const char* key, const char* riz_name, RizPluginFn fn, int arity) {
+static void RIZ_API_CALL ffi_dict_set_fn(RizValue dict, const char* key, const char* riz_name, RizPluginFn fn, int arity) {
     if (dict.type != VAL_DICT) return;
     riz_dict_set(dict.as.dict, key, riz_native(riz_name, (NativeFnPtr)fn, arity));
 }
 
-static void ffi_define_global(void* interp_ptr, const char* name, RizPluginValue value) {
+static void RIZ_API_CALL ffi_define_global(void* interp_ptr, const char* name, RizValue value) {
+    if (!interp_ptr) return;
     Interpreter* I = (Interpreter*)interp_ptr;
     env_define(I->globals, name, value, false);
 }
 
-static void ffi_define_global_vm(void* interp_ptr, const char* name, RizPluginValue value) {
+static void RIZ_API_CALL ffi_define_global_vm(void* interp_ptr, const char* name, RizValue value) {
+    if (!interp_ptr) return;
     RizVM* vm = (RizVM*)interp_ptr;
     env_define(vm->globals, name, value, false);
 }
 
-static RizPluginValue ffi_make_int(int64_t v)      { return riz_int(v); }
-static RizPluginValue ffi_make_float(double v)     { return riz_float(v); }
-static RizPluginValue ffi_make_bool(bool v)        { return riz_bool(v); }
-static RizPluginValue ffi_make_string(const char*v){ return riz_string(v); }
-static RizPluginValue ffi_make_none(void)          { return riz_none(); }
-static RizPluginValue ffi_make_list(void)          { return riz_list_new(); }
-static RizPluginValue ffi_make_native_ptr(void* p, const char* tag, void(*dtor)(void*)) {
-    return riz_native_ptr(p, tag, dtor);
-}
-static void* ffi_get_native_ptr(RizPluginValue v) {
-    if (v.type == VAL_NATIVE_PTR && v.as.native_ptr) return v.as.native_ptr->ptr;
-    return NULL;
-}
-static void ffi_list_append(RizPluginValue lst, RizPluginValue v) { if(lst.type == VAL_LIST) riz_list_append(lst.as.list, v); }
-static int ffi_list_len(RizPluginValue v) { return v.type == VAL_LIST ? v.as.list->count : 0; }
-static RizPluginValue ffi_list_get(RizPluginValue v, int index) {
-    if (v.type != VAL_LIST || index < 0 || index >= v.as.list->count) return riz_none();
-    return v.as.list->items[index];
-}
-
-static int ffi_get_current_line(void* interp) {
-    Interpreter* I = (Interpreter*)interp;
-    return I->current_line;
-}
-
-static int ffi_get_current_line_vm(void* interp) {
-    (void)interp;
-    return 0;
-}
-
-static void ffi_panic(void* interp, const char* msg) {
+static RizValue RIZ_API_CALL ffi_make_int(int64_t v)      { return riz_int(v); }
+static RizValue RIZ_API_CALL ffi_make_float(double v)     { return riz_float(v); }
+static RizValue RIZ_API_CALL ffi_make_bool(bool v)        { return riz_bool(v); }
+static RizValue RIZ_API_CALL ffi_make_string(const char*v){ return riz_string(v); }
+static void RIZ_API_CALL ffi_panic(void* interp, const char* msg) {
+    if (!interp) return;
     Interpreter* I = (Interpreter*)interp;
     fprintf(stderr, "\n\033[1;31m[Riz AI Panic]\033[0m %s\n", msg);
     fprintf(stderr, "  --> interpreter mode, line: %d\n", I->current_line);
     I->had_error = true;
-    /* Optional: We could cleanly longjmp out, but for plugin panics mimicking AOT 
-       we can just exit for now or let the runtime error system handle it. */
-    exit(1);
+    longjmp(I->panic_jmp, 1);
 }
 
-static void ffi_panic_vm(void* interp, const char* msg) {
+static void RIZ_API_CALL ffi_panic_vm(void* interp, const char* msg) {
+    if (!interp) return;
     RizVM* vm = (RizVM*)interp;
     fprintf(stderr, "\n\033[1;31m[Riz VM plugin panic]\033[0m %s\n", msg);
     vm->had_error = true;
-    exit(1);
+    longjmp(vm->panic_jmp, 1);
+}
+
+static RizValue RIZ_API_CALL ffi_make_none(void)          { return riz_none(); }
+static RizValue RIZ_API_CALL ffi_make_list(void)          { return riz_list_new(); }
+static RizValue RIZ_API_CALL ffi_make_native_ptr(void *p, const char *tag, void (*dtor)(void *)) {
+    return riz_native_ptr(p, tag, dtor);
+}
+static void* RIZ_API_CALL ffi_get_native_ptr(RizValue v) {
+    if (v.type == VAL_NATIVE_PTR && v.as.native_ptr) return v.as.native_ptr->ptr;
+    return NULL;
+}
+static void RIZ_API_CALL ffi_list_append(RizValue lst, RizValue v) { if(lst.type == VAL_LIST) riz_list_append(lst.as.list, v); }
+static int RIZ_API_CALL ffi_list_len(RizValue v) { return v.type == VAL_LIST ? v.as.list->count : 0; }
+static RizValue RIZ_API_CALL ffi_list_get(RizValue v, int index) {
+    if (v.type != VAL_LIST || index < 0 || index >= v.as.list->count) return riz_none();
+    return v.as.list->items[index];
+}
+
+static int RIZ_API_CALL ffi_get_current_line(void* interp) {
+    return interp ? ((Interpreter*)interp)->current_line : 0;
+}
+
+static int RIZ_API_CALL ffi_get_current_line_vm(void* interp) {
+    (void)interp;
+    return 0;
+}
+
+
+void riz_populate_plugin_api(void* I, RizPluginAPI* api) {
+    if (!api) return;
+    memset(api, 0, sizeof(RizPluginAPI));
+    api->size = sizeof(RizPluginAPI);
+    api->register_fn = ffi_register_fn;
+    api->make_int = ffi_make_int;
+    api->make_float = ffi_make_float;
+    api->make_bool = ffi_make_bool;
+    api->make_string = ffi_make_string;
+    api->make_none = ffi_make_none;
+    api->make_list = ffi_make_list;
+    api->make_native_ptr = ffi_make_native_ptr;
+    api->get_native_ptr = ffi_get_native_ptr;
+    api->list_append = ffi_list_append;
+    api->list_length = ffi_list_len;
+    api->list_get = ffi_list_get;
+    api->interp = I;
+    api->get_current_line = ffi_get_current_line;
+    api->panic = ffi_panic;
+    api->make_dict = ffi_make_dict;
+    api->dict_set_fn = ffi_dict_set_fn;
+    api->define_global = ffi_define_global;
 }
 
 bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path) {
@@ -2667,19 +2723,31 @@ bool riz_plugin_load_vm(Environment* env, RizVM* vm, const char* path) {
     return true;
 }
 
+static void bridge_log(const char* msg) {
+    FILE* f = fopen("bridge_debug.txt", "a");
+    if (f) { fprintf(f, "%s\n", msg); fflush(f); fclose(f); }
+}
+
 static bool load_native_plugin(Interpreter* I, const char* path) {
+    char buf[256];
+    sprintf(buf, "[Riz Bridge] Loading: %s", path);
+    bridge_log(buf);
 #ifdef _WIN32
     HMODULE lib = LoadLibraryA(path);
     if (!lib) {
+        bridge_log("[Riz Bridge] LoadLibraryA FAILED");
         riz_runtime_error("Failed to load native library '%s' (error %lu)", path, GetLastError());
         return false;
     }
+    bridge_log("[Riz Bridge] Handle OK. Finding init_fn...");
     RizPluginInitFn init_fn = (RizPluginInitFn)GetProcAddress(lib, "riz_plugin_init");
     if (!init_fn) {
+        bridge_log("[Riz Bridge] init_fn NOT FOUND");
         riz_runtime_error("Library '%s' has no 'riz_plugin_init' entry point", path);
         FreeLibrary(lib);
         return false;
     }
+    bridge_log("[Riz Bridge] init_fn found. Calling...");
 #else
     /* POSIX: dlopen/dlsym */
     void* lib = dlopen(path, RTLD_NOW);
@@ -2696,6 +2764,7 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
 #endif
     /* Build the API bridge and call the plugin's init */
     RizPluginAPI api = {0};
+    api.size = sizeof(RizPluginAPI);
     api.register_fn  = ffi_register_fn;
     api.make_int        = ffi_make_int;
     api.make_float      = ffi_make_float;
@@ -2714,7 +2783,10 @@ static bool load_native_plugin(Interpreter* I, const char* path) {
     api.make_dict       = ffi_make_dict;
     api.dict_set_fn     = ffi_dict_set_fn;
     api.define_global   = ffi_define_global;
+    
+    printf("[Riz Bridge] Calling riz_plugin_init in DLL...\n");
     init_fn(&api);
+    printf("[Riz Bridge] riz_plugin_init RETURNED successfully.\n");
 
     /* Track the handle so we can free it later */
     I->loaded_libs = realloc(I->loaded_libs, sizeof(void*) * (I->lib_count + 1));
@@ -2973,7 +3045,7 @@ static void run_import(Interpreter* I, const char* path) {
  * ═══════════════════════════════════════════════════════ */
 
 static RizValue eval_binary(Interpreter* I, ASTNode* node) {
-    TokenType op = node->as.binary.op;
+    RizTokenType op = node->as.binary.op;
 
     /* Short-circuit logical */
     if (op == TOK_AND) { RizValue l=eval(I,node->as.binary.left); return riz_bool(!riz_value_is_truthy(l)?false:riz_value_is_truthy(eval(I,node->as.binary.right))); }
@@ -3217,7 +3289,7 @@ static RizValue eval_match(Interpreter* I, ASTNode* node) {
  * ═══════════════════════════════════════════════════════ */
 
 static RizValue eval(Interpreter* I, ASTNode* node) {
-    if (!node) return riz_none();
+    if (!node || I->had_error) return riz_none();
     I->current_line = node->line;
     switch (node->type) {
         /* Literals */
@@ -3697,7 +3769,13 @@ static void exec_block(Interpreter* I, ASTNode* block) {
 
 /* ═══ Public API ═══ */
 
-void interpreter_exec(Interpreter* interp, ASTNode* program) { g_interp=interp; eval(interp,program); }
+void interpreter_exec(Interpreter* I, ASTNode* program) {
+    if (setjmp(I->panic_jmp) == 0) {
+        g_interp = I;
+        eval(I, program);
+    }
+    // Any error (longjmp) returns here safely.
+}
 RizValue interpreter_eval(Interpreter* interp, ASTNode* node) { g_interp=interp; return eval(interp,node); }
 
 void interpreter_report_pending_signal(Interpreter* interp) {

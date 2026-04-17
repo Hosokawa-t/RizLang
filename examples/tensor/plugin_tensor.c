@@ -263,72 +263,84 @@ static void clear_visited(Tensor* t) {
  * ================================================================== */
 
 /* Creation */
-static RizPluginValue fn_zeros(RizPluginValue* a,int n){return wrap(t_new((int)a[0].as.integer,(int)a[1].as.integer,0));}
-static RizPluginValue fn_ones(RizPluginValue* a,int n){
-    Tensor*t=t_new((int)a[0].as.integer,(int)a[1].as.integer,0);
-    for(int i=0;i<t->size;i++)t->data[i]=1;return wrap(t);
+static RizPluginValue RIZ_API_CALL fn_zeros(RizPluginValue* a, int n) {
+    if (a[0].type != VAL_INT || a[1].type != VAL_INT) return G.make_none();
+    return wrap(t_new((int)a[0].as.integer, (int)a[1].as.integer, 0));
 }
-static RizPluginValue fn_rand(RizPluginValue* a,int n){
-    Tensor*t=t_new((int)a[0].as.integer,(int)a[1].as.integer,0);
-    for(int i=0;i<t->size;i++)t->data[i]=(float)rand()/(float)RAND_MAX;return wrap(t);
+static RizPluginValue RIZ_API_CALL fn_ones(RizPluginValue* a, int n) {
+    if (a[0].type != VAL_INT || a[1].type != VAL_INT) return G.make_none();
+    Tensor* t = t_new((int)a[0].as.integer, (int)a[1].as.integer, 0);
+    for (int i = 0; i < t->size; i++) t->data[i] = 1.0f;
+    return wrap(t);
 }
-static RizPluginValue fn_param(RizPluginValue* a,int n){
-    Tensor*t=t_new((int)a[0].as.integer,(int)a[1].as.integer,1);
-    float sc=sqrtf(2.0f/(float)(t->rows+t->cols));
-    for(int i=0;i<t->size;i++)t->data[i]=((float)rand()/(float)RAND_MAX-0.5f)*2.0f*sc;
+static RizPluginValue RIZ_API_CALL fn_rand(RizPluginValue* a, int n) {
+    if (a[0].type != VAL_INT || a[1].type != VAL_INT) return G.make_none();
+    Tensor* t = t_new((int)a[0].as.integer, (int)a[1].as.integer, 0);
+    for (int i = 0; i < t->size; i++) t->data[i] = (float)rand() / (float)RAND_MAX;
+    return wrap(t);
+}
+static RizPluginValue RIZ_API_CALL fn_param(RizPluginValue* a, int n) {
+    if (a[0].type != VAL_INT || a[1].type != VAL_INT) return G.make_none();
+    Tensor* t = t_new((int)a[0].as.integer, (int)a[1].as.integer, 1);
+    float sc = sqrtf(2.0f / (float)(t->rows + t->cols));
+    for (int i = 0; i < t->size; i++) t->data[i] = ((float)rand() / (float)RAND_MAX - 0.5f) * 2.0f * sc;
     return wrap(t);
 }
 
 /* Data access */
-static RizPluginValue fn_set(RizPluginValue* a,int n){
-    Tensor*t=as_t(a[0]);int r=(int)a[1].as.integer,c=(int)a[2].as.integer;
-    float v=(float)(a[3].type==VAL_FLOAT?a[3].as.floating:(double)a[3].as.integer);
-    if(t&&r>=0&&r<t->rows&&c>=0&&c<t->cols)t->data[r*t->cols+c]=v;
+static RizPluginValue RIZ_API_CALL fn_set(RizPluginValue* a, int n) {
+    Tensor* t = as_t(a[0]);
+    if (!t || a[1].type != VAL_INT || a[2].type != VAL_INT) return G.make_none();
+    int r = (int)a[1].as.integer, c = (int)a[2].as.integer;
+    float v = (float)(a[3].type == VAL_FLOAT ? a[3].as.floating : (double)a[3].as.integer);
+    if (r >= 0 && r < t->rows && c >= 0 && c < t->cols) t->data[r * t->cols + c] = v;
     return G.make_none();
 }
-static RizPluginValue fn_get(RizPluginValue* a,int n){
-    Tensor*t=as_t(a[0]);int r=(int)a[1].as.integer,c=(int)a[2].as.integer;
-    if(!t||r<0||r>=t->rows||c<0||c>=t->cols)return G.make_float(0);
-    return G.make_float((double)t->data[r*t->cols+c]);
+static RizPluginValue RIZ_API_CALL fn_get(RizPluginValue* a, int n) {
+    Tensor* t = as_t(a[0]);
+    if (!t || a[1].type != VAL_INT || a[2].type != VAL_INT) return G.make_float(0);
+    int r = (int)a[1].as.integer, c = (int)a[2].as.integer;
+    if (r < 0 || r >= t->rows || c < 0 || c >= t->cols) return G.make_float(0);
+    return G.make_float((double)t->data[r * t->cols + c]);
 }
 
 /* Arithmetic */
-static RizPluginValue fn_add(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_add(RizPluginValue* a,int n){
     Tensor*A=as_t(a[0]),*B=as_t(a[1]);if(!A||!B)return G.make_none();return wrap(fwd_add(A,B));
 }
-static RizPluginValue fn_sub(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_sub(RizPluginValue* a,int n){
     Tensor*A=as_t(a[0]),*B=as_t(a[1]);if(!A||!B)return G.make_none();return wrap(fwd_sub(A,B));
 }
-static RizPluginValue fn_mul(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_mul(RizPluginValue* a,int n){
     Tensor*A=as_t(a[0]),*B=as_t(a[1]);if(!A||!B)return G.make_none();return wrap(fwd_mul(A,B));
 }
-static RizPluginValue fn_matmul(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_matmul(RizPluginValue* a,int n){
     Tensor*A=as_t(a[0]),*B=as_t(a[1]);
     if(!A||!B||A->cols!=B->rows){fprintf(stderr,"[tensor] matmul shape error\n");return G.make_none();}
     return wrap(fwd_matmul(A,B));
 }
 
 /* Activations */
-static RizPluginValue fn_relu(RizPluginValue* a,int n){Tensor*A=as_t(a[0]);if(!A)return G.make_none();return wrap(fwd_relu(A));}
-static RizPluginValue fn_sigmoid(RizPluginValue* a,int n){Tensor*A=as_t(a[0]);if(!A)return G.make_none();return wrap(fwd_sigmoid(A));}
+static RizPluginValue RIZ_API_CALL fn_relu(RizPluginValue* a,int n){Tensor*A=as_t(a[0]);if(!A)return G.make_none();return wrap(fwd_relu(A));}
+static RizPluginValue RIZ_API_CALL fn_sigmoid(RizPluginValue* a,int n){Tensor*A=as_t(a[0]);if(!A)return G.make_none();return wrap(fwd_sigmoid(A));}
 
 /* Broadcast */
-static RizPluginValue fn_bias_add(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_bias_add(RizPluginValue* a,int n){
     Tensor*M=as_t(a[0]),*B=as_t(a[1]);if(!M||!B)return G.make_none();return wrap(fwd_bias_add(M,B));
 }
 
 /* Reduction (returns 1x1 Tensor to keep autograd alive) */
-static RizPluginValue fn_sum_t(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_sum_t(RizPluginValue* a,int n){
     Tensor*A=as_t(a[0]);if(!A)return G.make_none();return wrap(fwd_sum(A));
 }
 
 /* Scalar extraction from 1x1 tensor */
-static RizPluginValue fn_item(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_item(RizPluginValue* a,int n){
     Tensor*t=as_t(a[0]);if(!t)return G.make_float(0);return G.make_float((double)t->data[0]);
 }
 
 /* Autograd */
-static RizPluginValue fn_backward(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_backward(RizPluginValue* a,int n){
     Tensor*t=as_t(a[0]);if(!t)return G.make_none();
     t_ensure_grad(t);
     for(int i=0;i<t->size;i++)t->grad[i]=1.0f;
@@ -337,30 +349,35 @@ static RizPluginValue fn_backward(RizPluginValue* a,int n){
     return G.make_none();
 }
 
-static RizPluginValue fn_zero_grad(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_zero_grad(RizPluginValue* a,int n){
     Tensor*t=as_t(a[0]);
-    if(t&&t->grad)memset(t->grad,0,sizeof(float)*t->size);
+    if(!t)return G.make_none();
+    if(t->grad)memset(t->grad,0,sizeof(float)*t->size);
     t->op=OP_NONE; t->src[0]=NULL; t->src[1]=NULL;
     return G.make_none();
 }
 
 /* Optimizer */
-static RizPluginValue fn_sgd(RizPluginValue* a,int n){
-    Tensor*p=as_t(a[0]);
-    double lr=a[1].type==VAL_FLOAT?a[1].as.floating:(double)a[1].as.integer;
-    if(!p||!p->grad)return G.make_none();
-    for(int i=0;i<p->size;i++)p->data[i]-=(float)lr*p->grad[i];
+static RizPluginValue RIZ_API_CALL fn_sgd(RizPluginValue* a, int n) {
+    Tensor* p = as_t(a[0]);
+    if (!p || !p->grad) return G.make_none();
+    double lr = 0.01;
+    if (n > 1) {
+        if (a[1].type == VAL_FLOAT) lr = a[1].as.floating;
+        else if (a[1].type == VAL_INT) lr = (double)a[1].as.integer;
+    }
+    for (int i = 0; i < p->size; i++) p->data[i] -= (float)lr * p->grad[i];
     return G.make_none();
 }
 
 /* Inspection */
-static RizPluginValue fn_shape(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_shape(RizPluginValue* a,int n){
     Tensor*t=as_t(a[0]);if(!t)return G.make_none();
     RizPluginValue l=G.make_list();
     G.list_append(l,G.make_int(t->rows));
     G.list_append(l,G.make_int(t->cols));return l;
 }
-static RizPluginValue fn_print(RizPluginValue* a,int n){
+static RizPluginValue RIZ_API_CALL fn_print(RizPluginValue* a,int n){
     Tensor*t=as_t(a[0]);if(!t){printf("Tensor(null)\n");return G.make_none();}
     printf("Tensor(%dx%d) [\n",t->rows,t->cols);
     int mr=t->rows<10?t->rows:10;
@@ -398,12 +415,12 @@ static Tensor* fwd_tanh(Tensor* a) {
     c->src[0] = a;
     return c;
 }
-static RizPluginValue fn_tanh(RizPluginValue* a, int n) {
+static RizPluginValue RIZ_API_CALL fn_tanh(RizPluginValue* a, int n) {
     Tensor* A = as_t(a[0]); if (!A) return G.make_none(); return wrap(fwd_tanh(A));
 }
 
 /* scale_div: divide all elements by a scalar (for mean loss) */
-static RizPluginValue fn_scale_div(RizPluginValue* a, int n) {
+static RizPluginValue RIZ_API_CALL fn_scale_div(RizPluginValue* a, int n) {
     Tensor* A = as_t(a[0]);
     double d = a[1].type == VAL_FLOAT ? a[1].as.floating : (double)a[1].as.integer;
     if (!A || d == 0) return G.make_none();
@@ -416,9 +433,12 @@ static RizPluginValue fn_scale_div(RizPluginValue* a, int n) {
 
 /* ---- Entry point ---- */
 
-RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
-    G = *api;
-    srand((unsigned)time(NULL));
+RIZ_EXPORT void RIZ_API_CALL riz_tensor_init(RizPluginAPI* api) {
+    if (!api || api->size < sizeof(size_t)) return;
+    
+    size_t copy_size = (api->size < sizeof(RizPluginAPI)) ? api->size : sizeof(RizPluginAPI);
+    memset(&G, 0, sizeof(RizPluginAPI));
+    memcpy(&G, api, copy_size);
 
     api->register_fn(api->interp, "tensor_zeros",    fn_zeros,    2);
     api->register_fn(api->interp, "tensor_ones",     fn_ones,     2);
@@ -439,6 +459,7 @@ RIZ_EXPORT void riz_plugin_init(RizPluginAPI* api) {
     api->register_fn(api->interp, "tensor_backward", fn_backward, 1);
     api->register_fn(api->interp, "tensor_zero_grad",fn_zero_grad,1);
     api->register_fn(api->interp, "tensor_sgd",      fn_sgd,      2);
+    api->register_fn(api->interp, "tensor_sgd_optimizer", fn_sgd, 2);
     api->register_fn(api->interp, "tensor_shape",    fn_shape,    1);
     api->register_fn(api->interp, "tensor_print",    fn_print,    1);
     api->register_fn(api->interp, "tensor_make_sine",fn_make_sine,1);

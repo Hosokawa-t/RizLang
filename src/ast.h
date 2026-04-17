@@ -108,13 +108,13 @@ struct ASTNode {
 
         /* NODE_UNARY */
         struct {
-            TokenType op;
+            RizTokenType op;
             ASTNode*  operand;
         } unary;
 
         /* NODE_BINARY */
         struct {
-            TokenType op;
+            RizTokenType op;
             ASTNode*  left;
             ASTNode*  right;
         } binary;
@@ -141,7 +141,7 @@ struct ASTNode {
         /* NODE_COMPOUND_ASSIGN */
         struct {
             char*     name;
-            TokenType op;        /* TOK_PLUS, TOK_MINUS, etc */
+            RizTokenType op;        /* TOK_PLUS, TOK_MINUS, etc */
             ASTNode*  value;
         } compound_assign;
 
@@ -331,12 +331,12 @@ ASTNode* ast_none_lit(int line);
 ASTNode* ast_list_lit(ASTNode** items, int count, int line);
 ASTNode* ast_dict_lit(ASTNode** keys, ASTNode** values, int count, int line);
 ASTNode* ast_identifier(const char* name, int line);
-ASTNode* ast_unary(TokenType op, ASTNode* operand, int line);
-ASTNode* ast_binary(TokenType op, ASTNode* left, ASTNode* right, int line);
+ASTNode* ast_unary(RizTokenType op, ASTNode* operand, int line);
+ASTNode* ast_binary(RizTokenType op, ASTNode* left, ASTNode* right, int line);
 ASTNode* ast_call(ASTNode* callee, ASTNode** args, int arg_count, int line);
 ASTNode* ast_index(ASTNode* object, ASTNode* index, int line);
 ASTNode* ast_assign(const char* name, ASTNode* value, int line);
-ASTNode* ast_compound_assign(const char* name, TokenType op, ASTNode* value, int line);
+ASTNode* ast_compound_assign(const char* name, RizTokenType op, ASTNode* value, int line);
 ASTNode* ast_member(ASTNode* object, const char* member, int line);
 ASTNode* ast_pipe(ASTNode* left, ASTNode* right, int line);
 ASTNode* ast_lambda(char** params, int param_count, ASTNode* body, int line);

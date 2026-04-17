@@ -12,6 +12,7 @@
 #include "chunk.h"
 #include "value.h"
 #include "environment.h"
+#include <setjmp.h>
 
 /* ─── Configuration ───────────────────────────────────── */
 #define RIZ_REG_MAX     256
@@ -52,6 +53,7 @@ typedef struct {
     /* Native plugins loaded via OP_IMPORT_NATIVE (FreeLibrary/dlclose on vm_free). */
     void**      native_libs;
     int         native_lib_count;
+    jmp_buf     panic_jmp;
 } RizVM;
 
 /* ─── Result ──────────────────────────────────────────── */

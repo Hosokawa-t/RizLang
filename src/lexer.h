@@ -62,11 +62,11 @@ typedef enum {
     TOK_NEWLINE,
     TOK_EOF,
     TOK_ERROR,
-} TokenType;
+} RizTokenType;
 
 /* ─── Token ───────────────────────────────────────────── */
 typedef struct {
-    TokenType   type;
+    RizTokenType type;
     const char* start;      /* pointer into source string */
     int         length;
     int         line;
@@ -87,6 +87,6 @@ void  lexer_init(Lexer* lexer, const char* source);
 Token lexer_next_token(Lexer* lexer);
 
 /* Utility: get the string name for a token type */
-const char* token_type_name(TokenType type);
+const char* token_type_name(RizTokenType type);
 
 #endif /* RIZ_LEXER_H */

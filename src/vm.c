@@ -326,7 +326,17 @@ VMResult vm_execute(RizVM* vm, Chunk* chunk) {
         [OP_RETURN]    = &&L_RETURN,
         [OP_PRINT]     = &&L_PRINT,
         [OP_GETINDEX]  = &&L_GETINDEX,
+        [OP_SETINDEX]  = &&L_SETINDEX,
         [OP_BUILDLIST] = &&L_BUILDLIST,
+        [OP_NEWDICT]   = &&L_NEWDICT,
+        [OP_GETMEMBER] = &&L_GETMEMBER,
+        [OP_SETMEMBER] = &&L_SETMEMBER,
+        [OP_CONCAT]    = &&L_CONCAT,
+        [OP_AND]       = &&L_AND,
+        [OP_OR]        = &&L_OR,
+        [OP_CLOSURE]   = &&L_CLOSURE,
+        [OP_LOOP_BREAK] = &&L_LOOP_BREAK,
+        [OP_LOOP_CONT]  = &&L_LOOP_CONT,
         [OP_IMPORT]        = &&L_IMPORT,
         [OP_IMPORT_NATIVE] = &&L_IMPORT_NATIVE,
         [OP_HALT]          = &&L_HALT,
@@ -631,21 +641,242 @@ L_BUILDLIST: {
 L_GETINDEX: {
     uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
     RizValue obj = R[b], idxv = R[c];
-    if (obj.type != VAL_LIST) {
-        riz_runtime_error("VM: indexed value is not a list");
+    if (obj.type == VAL_LIST) {
+        if (idxv.type != VAL_INT) {
+            riz_runtime_error("VM: list index must be int");
+            return VM_RUNTIME_ERROR;
+        }
+        int64_t ii = idxv.as.integer;
+        RizList* L = obj.as.list;
+        if (ii < 0) ii += L->count;
+        if (ii < 0 || ii >= L->count) {
+            riz_runtime_error("VM: list index %lld out of range (len %d)", (long long)ii, L->count);
+            return VM_RUNTIME_ERROR;
+        }
+        R[a] = riz_value_copy(L->items[ii]);
+    } else if (obj.type == VAL_DICT) {
+        if (idxv.type != VAL_STRING) {
+            riz_runtime_error("VM: dict key must be string");
+            return VM_RUNTIME_ERROR;
+        }
+        R[a] = riz_dict_get(obj.as.dict, idxv.as.string);
+    } else if (obj.type == VAL_STRING) {
+        if (idxv.type != VAL_INT) {
+            riz_runtime_error("VM: string index must be int");
+            return VM_RUNTIME_ERROR;
+        }
+        int64_t ii = idxv.as.integer;
+        int64_t slen = (int64_t)strlen(obj.as.string);
+        if (ii < 0) ii += slen;
+        if (ii < 0 || ii >= slen) {
+            riz_runtime_error("VM: string index %lld out of range (len %lld)", (long long)ii, (long long)slen);
+            return VM_RUNTIME_ERROR;
+        }
+        char buf[2] = { obj.as.string[ii], '\0' };
+        R[a] = riz_string(buf);
+    } else {
+        riz_runtime_error("VM: cannot index type '%s'", riz_value_type_name(obj));
         return VM_RUNTIME_ERROR;
     }
-    if (idxv.type != VAL_INT) {
-        riz_runtime_error("VM: list index must be int");
+    DISPATCH();
+}
+
+/* ═══ SETINDEX ═══ */
+
+L_SETINDEX: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+    RizValue obj = R[a], idxv = R[b], val = R[c];
+    if (obj.type == VAL_LIST) {
+        if (idxv.type != VAL_INT) {
+            riz_runtime_error("VM: list index must be int");
+            return VM_RUNTIME_ERROR;
+        }
+        int64_t ii = idxv.as.integer;
+        RizList* L = obj.as.list;
+        if (ii < 0) ii += L->count;
+        if (ii < 0 || ii >= L->count) {
+            riz_runtime_error("VM: list index %lld out of range (len %d)", (long long)ii, L->count);
+            return VM_RUNTIME_ERROR;
+        }
+        riz_value_free(&L->items[ii]);
+        L->items[ii] = riz_value_copy(val);
+    } else if (obj.type == VAL_DICT) {
+        if (idxv.type != VAL_STRING) {
+            riz_runtime_error("VM: dict key must be string");
+            return VM_RUNTIME_ERROR;
+        }
+        riz_dict_set(obj.as.dict, idxv.as.string, riz_value_copy(val));
+    } else {
+        riz_runtime_error("VM: cannot assign to index of type '%s'", riz_value_type_name(obj));
         return VM_RUNTIME_ERROR;
     }
-    int64_t ii = idxv.as.integer;
-    RizList* L = obj.as.list;
-    if (ii < 0 || ii >= L->count) {
-        riz_runtime_error("VM: list index %lld out of range (len %d)", (long long)ii, L->count);
+    DISPATCH();
+}
+
+/* ═══ NEWDICT ═══ */
+
+L_NEWDICT: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+    /* c = number of key-value pairs. Keys in K[const], values in R[reg].
+       Layout: pairs are at R[b], R[b+1], R[b+2], R[b+3]...
+       where even offsets are key regs, odd offsets are value regs */
+    RizValue dict = riz_dict_new();
+    for (int i = 0; i < c; i++) {
+        RizValue kv = R[b + i * 2];
+        RizValue vv = R[b + i * 2 + 1];
+        const char* key_str;
+        if (kv.type == VAL_STRING)
+            key_str = kv.as.string;
+        else {
+            riz_runtime_error("VM: dict key must be string");
+            return VM_RUNTIME_ERROR;
+        }
+        riz_dict_set(dict.as.dict, key_str, riz_value_copy(vv));
+    }
+    R[a] = dict;
+    DISPATCH();
+}
+
+/* ═══ GETMEMBER ═══ */
+
+L_GETMEMBER: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr);
+    uint8_t c = RIZ_C(instr);
+    /* Member name is in K[c] */
+    RizValue obj = R[b];
+    const char* name = K[c].as.string;
+    if (obj.type == VAL_INSTANCE) {
+        RizInstance* inst = obj.as.instance;
+        /* Check fields first */
+        for (int i = 0; i < inst->def->field_count; i++) {
+            if (strcmp(inst->def->field_names[i], name) == 0) {
+                R[a] = riz_value_copy(inst->fields[i]);
+                goto getmember_done;
+            }
+        }
+        /* Check methods */
+        for (int i = 0; i < inst->def->method_count; i++) {
+            if (strcmp(inst->def->method_names[i], name) == 0) {
+                R[a] = riz_value_copy(inst->def->method_values[i]);
+                goto getmember_done;
+            }
+        }
+        riz_runtime_error("VM: '%s' has no member '%s'", inst->def->name, name);
+        return VM_RUNTIME_ERROR;
+    } else if (obj.type == VAL_DICT) {
+        R[a] = riz_dict_get(obj.as.dict, name);
+    } else {
+        riz_runtime_error("VM: cannot access member '%s' on type '%s'", name, riz_value_type_name(obj));
         return VM_RUNTIME_ERROR;
     }
-    R[a] = riz_value_copy(L->items[ii]);
+getmember_done:
+    DISPATCH();
+}
+
+/* ═══ SETMEMBER ═══ */
+
+L_SETMEMBER: {
+    uint8_t a = RIZ_A(instr);
+    uint16_t bx = RIZ_Bx(instr);
+    /* Next instruction word contains the value register in its A field */
+    RizInstr next = *ip++;
+    uint8_t val_reg = RIZ_A(next);
+    RizValue obj = R[a];
+    const char* name = K[bx].as.string;
+    if (obj.type == VAL_INSTANCE) {
+        RizInstance* inst = obj.as.instance;
+        for (int i = 0; i < inst->def->field_count; i++) {
+            if (strcmp(inst->def->field_names[i], name) == 0) {
+                riz_value_free(&inst->fields[i]);
+                inst->fields[i] = riz_value_copy(R[val_reg]);
+                goto setmember_done;
+            }
+        }
+        riz_runtime_error("VM: '%s' has no field '%s'", inst->def->name, name);
+        return VM_RUNTIME_ERROR;
+    } else if (obj.type == VAL_DICT) {
+        riz_dict_set(obj.as.dict, name, riz_value_copy(R[val_reg]));
+    } else {
+        riz_runtime_error("VM: cannot set member '%s' on type '%s'", name, riz_value_type_name(obj));
+        return VM_RUNTIME_ERROR;
+    }
+setmember_done:
+    DISPATCH();
+}
+
+/* ═══ CONCAT ═══ */
+
+L_CONCAT: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+    /* Concatenate c values starting from R[b] into R[a] */
+    size_t total = 0;
+    for (int i = 0; i < c; i++) {
+        RizValue v = R[b + i];
+        if (v.type == VAL_STRING) total += strlen(v.as.string);
+        else { /* convert to string */ char* s = riz_value_to_string(v); total += strlen(s); free(s); }
+    }
+    char* buf = (char*)malloc(total + 1);
+    size_t pos = 0;
+    for (int i = 0; i < c; i++) {
+        RizValue v = R[b + i];
+        if (v.type == VAL_STRING) {
+            size_t sl = strlen(v.as.string);
+            memcpy(buf + pos, v.as.string, sl);
+            pos += sl;
+        } else {
+            char* s = riz_value_to_string(v);
+            size_t sl = strlen(s);
+            memcpy(buf + pos, s, sl);
+            pos += sl;
+            free(s);
+        }
+    }
+    buf[pos] = '\0';
+    R[a] = riz_string_take(buf);
+    DISPATCH();
+}
+
+/* ═══ AND / OR (short-circuit) ═══ */
+
+L_AND: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr);
+    if (!riz_value_is_truthy(R[a])) {
+        /* R[a] is falsy — keep it, skip the next instruction */
+        ip++;
+    }
+    /* Otherwise fall through to next instruction which loads R[b] into R[a] */
+    DISPATCH();
+}
+
+L_OR: {
+    uint8_t a = RIZ_A(instr), b = RIZ_B(instr);
+    if (riz_value_is_truthy(R[a])) {
+        /* R[a] is truthy — keep it, skip the next instruction */
+        ip++;
+    }
+    DISPATCH();
+}
+
+/* ═══ CLOSURE ═══ */
+
+L_CLOSURE: {
+    uint8_t a = RIZ_A(instr);
+    uint16_t bx = RIZ_Bx(instr);
+    R[a] = riz_value_copy(K[bx]);
+    DISPATCH();
+}
+
+/* ═══ LOOP CONTROL ═══ */
+
+L_LOOP_BREAK: {
+    int offset = RIZ_sBx(instr);
+    ip += offset;
+    DISPATCH();
+}
+
+L_LOOP_CONT: {
+    int offset = RIZ_sBx(instr);
+    ip += offset;
     DISPATCH();
 }
 
@@ -831,23 +1062,111 @@ L_HALT:
             }
             case OP_GETINDEX: {
                 uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
-                if (R[b].type != VAL_LIST) {
-                    riz_runtime_error("VM: indexed value is not a list");
-                    return VM_RUNTIME_ERROR;
-                }
-                if (R[c].type != VAL_INT) {
-                    riz_runtime_error("VM: list index must be int");
-                    return VM_RUNTIME_ERROR;
-                }
-                int64_t ii = R[c].as.integer;
-                RizList* L = R[b].as.list;
-                if (ii < 0 || ii >= L->count) {
-                    riz_runtime_error("VM: list index out of range");
-                    return VM_RUNTIME_ERROR;
-                }
-                R[a] = riz_value_copy(L->items[ii]);
+                RizValue obj_sw = R[b], idxv_sw = R[c];
+                if (obj_sw.type == VAL_LIST) {
+                    if (idxv_sw.type != VAL_INT) { riz_runtime_error("VM: list index must be int"); return VM_RUNTIME_ERROR; }
+                    int64_t ii = idxv_sw.as.integer;
+                    RizList* L = obj_sw.as.list;
+                    if (ii < 0) ii += L->count;
+                    if (ii < 0 || ii >= L->count) { riz_runtime_error("VM: list index out of range"); return VM_RUNTIME_ERROR; }
+                    R[a] = riz_value_copy(L->items[ii]);
+                } else if (obj_sw.type == VAL_DICT) {
+                    if (idxv_sw.type != VAL_STRING) { riz_runtime_error("VM: dict key must be string"); return VM_RUNTIME_ERROR; }
+                    R[a] = riz_dict_get(obj_sw.as.dict, idxv_sw.as.string);
+                } else if (obj_sw.type == VAL_STRING) {
+                    if (idxv_sw.type != VAL_INT) { riz_runtime_error("VM: string index must be int"); return VM_RUNTIME_ERROR; }
+                    int64_t ii = idxv_sw.as.integer;
+                    int64_t slen = (int64_t)strlen(obj_sw.as.string);
+                    if (ii < 0) ii += slen;
+                    if (ii < 0 || ii >= slen) { riz_runtime_error("VM: string index out of range"); return VM_RUNTIME_ERROR; }
+                    char sb[2] = { obj_sw.as.string[ii], '\0' };
+                    R[a] = riz_string(sb);
+                } else { riz_runtime_error("VM: cannot index type '%s'", riz_value_type_name(obj_sw)); return VM_RUNTIME_ERROR; }
                 break;
             }
+            case OP_SETINDEX: {
+                uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+                RizValue obj_sw = R[a], idxv_sw = R[b], val_sw = R[c];
+                if (obj_sw.type == VAL_LIST) {
+                    if (idxv_sw.type != VAL_INT) { riz_runtime_error("VM: list index must be int"); return VM_RUNTIME_ERROR; }
+                    int64_t ii = idxv_sw.as.integer;
+                    RizList* L = obj_sw.as.list;
+                    if (ii < 0) ii += L->count;
+                    if (ii < 0 || ii >= L->count) { riz_runtime_error("VM: list index out of range"); return VM_RUNTIME_ERROR; }
+                    riz_value_free(&L->items[ii]);
+                    L->items[ii] = riz_value_copy(val_sw);
+                } else if (obj_sw.type == VAL_DICT) {
+                    if (idxv_sw.type != VAL_STRING) { riz_runtime_error("VM: dict key must be string"); return VM_RUNTIME_ERROR; }
+                    riz_dict_set(obj_sw.as.dict, idxv_sw.as.string, riz_value_copy(val_sw));
+                } else { riz_runtime_error("VM: cannot assign to index of '%s'", riz_value_type_name(obj_sw)); return VM_RUNTIME_ERROR; }
+                break;
+            }
+            case OP_NEWDICT: {
+                uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+                RizValue dict = riz_dict_new();
+                for (int i = 0; i < c; i++) {
+                    RizValue kv_sw = R[b + i * 2], vv_sw = R[b + i * 2 + 1];
+                    if (kv_sw.type != VAL_STRING) { riz_runtime_error("VM: dict key must be string"); return VM_RUNTIME_ERROR; }
+                    riz_dict_set(dict.as.dict, kv_sw.as.string, riz_value_copy(vv_sw));
+                }
+                R[a] = dict;
+                break;
+            }
+            case OP_GETMEMBER: {
+                uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c_sw = RIZ_C(instr);
+                RizValue obj_sw = R[b];
+                const char* nm = K[c_sw].as.string;
+                if (obj_sw.type == VAL_INSTANCE) {
+                    RizInstance* inst = obj_sw.as.instance;
+                    bool found = false;
+                    for (int i = 0; i < inst->def->field_count; i++) {
+                        if (strcmp(inst->def->field_names[i], nm) == 0) { R[a] = riz_value_copy(inst->fields[i]); found = true; break; }
+                    }
+                    if (!found) {
+                        for (int i = 0; i < inst->def->method_count; i++) {
+                            if (strcmp(inst->def->method_names[i], nm) == 0) { R[a] = riz_value_copy(inst->def->method_values[i]); found = true; break; }
+                        }
+                    }
+                    if (!found) { riz_runtime_error("VM: '%s' has no member '%s'", inst->def->name, nm); return VM_RUNTIME_ERROR; }
+                } else if (obj_sw.type == VAL_DICT) {
+                    R[a] = riz_dict_get(obj_sw.as.dict, nm);
+                } else { riz_runtime_error("VM: cannot access member on '%s'", riz_value_type_name(obj_sw)); return VM_RUNTIME_ERROR; }
+                break;
+            }
+            case OP_SETMEMBER: {
+                uint8_t a = RIZ_A(instr);
+                uint16_t bx = RIZ_Bx(instr);
+                RizInstr next_sw = *ip++;
+                uint8_t val_r = RIZ_A(next_sw);
+                RizValue obj_sw = R[a];
+                const char* nm = K[bx].as.string;
+                if (obj_sw.type == VAL_INSTANCE) {
+                    RizInstance* inst = obj_sw.as.instance;
+                    bool found = false;
+                    for (int i = 0; i < inst->def->field_count; i++) {
+                        if (strcmp(inst->def->field_names[i], nm) == 0) { riz_value_free(&inst->fields[i]); inst->fields[i] = riz_value_copy(R[val_r]); found = true; break; }
+                    }
+                    if (!found) { riz_runtime_error("VM: '%s' has no field '%s'", inst->def->name, nm); return VM_RUNTIME_ERROR; }
+                } else if (obj_sw.type == VAL_DICT) {
+                    riz_dict_set(obj_sw.as.dict, nm, riz_value_copy(R[val_r]));
+                } else { riz_runtime_error("VM: cannot set member on '%s'", riz_value_type_name(obj_sw)); return VM_RUNTIME_ERROR; }
+                break;
+            }
+            case OP_CONCAT: {
+                uint8_t a = RIZ_A(instr), b = RIZ_B(instr), c = RIZ_C(instr);
+                size_t total = 0;
+                for (int i = 0; i < c; i++) { RizValue v = R[b + i]; if (v.type == VAL_STRING) total += strlen(v.as.string); else { char* s = riz_value_to_string(v); total += strlen(s); free(s); } }
+                char* buf = (char*)malloc(total + 1); size_t pos = 0;
+                for (int i = 0; i < c; i++) { RizValue v = R[b + i]; if (v.type == VAL_STRING) { size_t sl = strlen(v.as.string); memcpy(buf + pos, v.as.string, sl); pos += sl; } else { char* s = riz_value_to_string(v); size_t sl = strlen(s); memcpy(buf + pos, s, sl); pos += sl; free(s); } }
+                buf[pos] = '\0';
+                R[a] = riz_string_take(buf);
+                break;
+            }
+            case OP_AND: { uint8_t a = RIZ_A(instr); if (!riz_value_is_truthy(R[a])) ip++; break; }
+            case OP_OR:  { uint8_t a = RIZ_A(instr); if (riz_value_is_truthy(R[a])) ip++; break; }
+            case OP_CLOSURE: { uint8_t a = RIZ_A(instr); uint16_t bx = RIZ_Bx(instr); R[a] = riz_value_copy(K[bx]); break; }
+            case OP_LOOP_BREAK: { ip += RIZ_sBx(instr); break; }
+            case OP_LOOP_CONT:  { ip += RIZ_sBx(instr); break; }
             case OP_HALT: return VM_OK;
             default: riz_runtime_error("Unknown opcode %d", RIZ_OP(instr)); return VM_RUNTIME_ERROR;
         }

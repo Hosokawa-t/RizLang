@@ -27,12 +27,15 @@ ASTNode* ast_dict_lit(ASTNode** keys, ASTNode** values, int count, int line) {
 /* ═══ Expressions ═══ */
 
 ASTNode* ast_identifier(const char* name, int line) { ASTNode* n=new_node(NODE_IDENTIFIER,line); n->as.identifier.name=riz_strdup(name); return n; }
-ASTNode* ast_unary(TokenType op, ASTNode* operand, int line) { ASTNode* n=new_node(NODE_UNARY,line); n->as.unary.op=op; n->as.unary.operand=operand; return n; }
-ASTNode* ast_binary(TokenType op, ASTNode* left, ASTNode* right, int line) { ASTNode* n=new_node(NODE_BINARY,line); n->as.binary.op=op; n->as.binary.left=left; n->as.binary.right=right; return n; }
+ASTNode* ast_unary(RizTokenType op, ASTNode* operand, int line) {
+ ASTNode* n=new_node(NODE_UNARY,line); n->as.unary.op=op; n->as.unary.operand=operand; return n; }
+ASTNode* ast_binary(RizTokenType op, ASTNode* left, ASTNode* right, int line) {
+ ASTNode* n=new_node(NODE_BINARY,line); n->as.binary.op=op; n->as.binary.left=left; n->as.binary.right=right; return n; }
 ASTNode* ast_call(ASTNode* callee, ASTNode** args, int arg_count, int line) { ASTNode* n=new_node(NODE_CALL,line); n->as.call.callee=callee; n->as.call.args=args; n->as.call.arg_count=arg_count; return n; }
 ASTNode* ast_index(ASTNode* object, ASTNode* index, int line) { ASTNode* n=new_node(NODE_INDEX,line); n->as.index_expr.object=object; n->as.index_expr.index=index; return n; }
 ASTNode* ast_assign(const char* name, ASTNode* value, int line) { ASTNode* n=new_node(NODE_ASSIGN,line); n->as.assign.name=riz_strdup(name); n->as.assign.value=value; return n; }
-ASTNode* ast_compound_assign(const char* name, TokenType op, ASTNode* value, int line) { ASTNode* n=new_node(NODE_COMPOUND_ASSIGN,line); n->as.compound_assign.name=riz_strdup(name); n->as.compound_assign.op=op; n->as.compound_assign.value=value; return n; }
+ASTNode* ast_compound_assign(const char* name, RizTokenType op, ASTNode* value, int line) {
+ ASTNode* n=new_node(NODE_COMPOUND_ASSIGN,line); n->as.compound_assign.name=riz_strdup(name); n->as.compound_assign.op=op; n->as.compound_assign.value=value; return n; }
 ASTNode* ast_member(ASTNode* object, const char* member, int line) { ASTNode* n=new_node(NODE_MEMBER,line); n->as.member.object=object; n->as.member.member=riz_strdup(member); return n; }
 ASTNode* ast_pipe(ASTNode* left, ASTNode* right, int line) { ASTNode* n=new_node(NODE_PIPE,line); n->as.pipe.left=left; n->as.pipe.right=right; return n; }
 ASTNode* ast_lambda(char** params, int param_count, ASTNode* body, int line) { ASTNode* n=new_node(NODE_LAMBDA,line); n->as.lambda.params=params; n->as.lambda.param_count=param_count; n->as.lambda.body=body; return n; }
