@@ -1,8 +1,5 @@
 /*
- * Riz Programming Language
- * common.h — Shared definitions, macros, and constants
- *
- * Copyright (c) 2026 Riz Contributors
+ * Riz — common definitions and platform detection
  */
 
 #ifndef RIZ_COMMON_H
@@ -11,41 +8,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 #include <stdbool.h>
-#include <ctype.h>
+#include <stdint.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <math.h>
 
-/* ─── Version ─────────────────────────────────────────── */
-#define RIZ_VERSION_MAJOR 0
-#define RIZ_VERSION_MINOR 9
-#define RIZ_VERSION_PATCH 7
-#define RIZ_VERSION "0.9.7"
-
-/* ─── Limits ──────────────────────────────────────────── */
-#define RIZ_MAX_ARGS       255
-#define RIZ_MAX_PARAMS     255
-#define RIZ_MAX_LOCALS     256
-#define RIZ_INITIAL_CAP    8
-#define RIZ_LINE_BUF_SIZE  1024
-
-/* ─── ANSI Colors ─────────────────────────────────────── */
 #ifdef _WIN32
-  /* Avoid Windows API name collisions:
-   * windows.h defines enum TOKEN_TYPE { ..., TokenType, ... }
-   * which clashes with our 'typedef enum { ... } TokenType;' in lexer.h.
-   * We redirect the Windows identifier before inclusion. */
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#include <unistd.h>
+#endif
+
+#define RIZ_VERSION "0.9.7"
+#define RIZ_MAX_ARGS 255
+#define RIZ_LINE_BUF_SIZE 1024
+#define RIZ_INITIAL_CAP 8
+#define RIZ_MAX_LOCALS 512
+#define RIZ_MAX_UPVALUES 512
+#define RIZ_STACK_MAX 1024
+
+static inline char* riz_strndup(const char* s, size_t n) {
+    char* res = (char*)malloc(n + 1);
+    if (res) { memcpy(res, s, n); res[n] = '\0'; }
+    return res;
+}
+
+#ifdef _WIN32
+#define RIZ_EXPORT __declspec(dllexport)
   #define WIN32_LEAN_AND_MEAN
   #define NOCOMM
   #define TokenType __win_TokenType
   #include <windows.h>
   #undef TokenType
   static inline void riz_enable_ansi(void) {
-      #ifdef _WIN32
       SetConsoleOutputCP(65001);
       SetConsoleCP(65001);
-      #endif
       HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
       DWORD mode = 0;
       GetConsoleMode(h, &mode);
@@ -55,9 +57,11 @@
       SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
   }
 #else
+#define RIZ_EXPORT
   static inline void riz_enable_ansi(void) {}
 #endif
 
+/* ─── ANSI Colors ────────────────────────────────────── */
 #define COL_RESET   "\033[0m"
 #define COL_RED     "\033[31m"
 #define COL_GREEN   "\033[32m"
@@ -71,12 +75,10 @@
 #define COL_ITALIC  "\033[3m"
 
 /* ─── Error Reporting ─────────────────────────────────── */
-/* Parse errors (parser.c); machine mode for `riz check` — see diagnostic.c */
 void riz_error(int line, const char* fmt, ...);
 
-#define riz_runtime_error(fmt, ...) \
-    fprintf(stderr, COL_RED COL_BOLD "RuntimeError: " COL_RESET \
-            COL_RED fmt COL_RESET "\n", ##__VA_ARGS__)
+void riz_actual_runtime_error(const char* fmt, ...);
+#define riz_runtime_error(fmt, ...) riz_actual_runtime_error(fmt, ##__VA_ARGS__)
 
 /* ─── Memory Helpers ──────────────────────────────────── */
 #define RIZ_ALLOC(type) \
@@ -98,14 +100,4 @@ static inline char* riz_strdup(const char* s) {
     return copy;
 }
 
-static inline char* riz_strndup(const char* s, size_t n) {
-    if (!s) return NULL;
-    char* copy = (char*)malloc(n + 1);
-    if (copy) {
-        memcpy(copy, s, n);
-        copy[n] = '\0';
-    }
-    return copy;
-}
-
-#endif /* RIZ_COMMON_H */
+#endif

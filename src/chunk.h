@@ -73,7 +73,25 @@ typedef enum {
 
     /* Containers */
     OP_GETINDEX,    /* A B C    R[A] = copy of R[B][R[C]] (list + int index) */
+    OP_SETINDEX,    /* A B C    R[A][R[B]] = R[C] (list/dict index assign) */
     OP_BUILDLIST,   /* A B C    R[A] = list of copies of R[B]..R[B+C-1] (C may be 0) */
+    OP_NEWDICT,     /* A B C    R[A] = dict from K[B],R[B+1]..K[B+2C-2],R[B+2C-1] */
+    OP_GETMEMBER,   /* A B Cx   R[A] = R[B].K[Cx] (member access by const name) -- Cx via Bx encoding */
+    OP_SETMEMBER,   /* A B Cx   R[A].K[Bx] = R[B] (member assign) -- reuse ABx: R[A].K[Bx] = value in next instr */
+
+    /* String */
+    OP_CONCAT,      /* A B C    R[A] = concat(R[B]..R[B+C-1]) (fast N-way string concat) */
+
+    /* Logic (short-circuit) */
+    OP_AND,         /* A B      if !R[A] skip next; else R[A] = R[B] */
+    OP_OR,          /* A B      if  R[A] skip next; else R[A] = R[B] */
+
+    /* Closures */
+    OP_CLOSURE,     /* A Bx     R[A] = closure(K[Bx]) -- wraps VM closure constant */
+
+    /* Loop control */
+    OP_LOOP_BREAK,  /* sBx      break: jump to loop end (patched offset) */
+    OP_LOOP_CONT,   /* sBx      continue: jump to loop increment (patched offset) */
 
     OP_IMPORT,       /* A Bx     load + run imported module (path in K[Bx]) */
     OP_IMPORT_NATIVE,/* A Bx    dlopen plugin (path string in K[Bx])   */

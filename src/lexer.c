@@ -34,7 +34,7 @@ static bool match_char(Lexer* L, char expected) {
     return true;
 }
 
-static Token make_token(Lexer* L, TokenType type) {
+static Token make_token(Lexer* L, RizTokenType type) {
     Token t;
     t.type = type;
     t.start = L->start;
@@ -104,7 +104,7 @@ static void skip_whitespace(Lexer* L) {
 typedef struct {
     const char* keyword;
     int         length;
-    TokenType   type;
+    RizTokenType   type;
 } Keyword;
 
 static const Keyword keywords[] = {
@@ -140,7 +140,7 @@ static const Keyword keywords[] = {
     { NULL,       0,  TOK_ERROR },
 };
 
-static TokenType check_keyword(const char* start, int length) {
+static RizTokenType check_keyword(const char* start, int length) {
     for (int i = 0; keywords[i].keyword != NULL; i++) {
         if (length == keywords[i].length &&
             memcmp(start, keywords[i].keyword, length) == 0) {
@@ -209,7 +209,7 @@ static Token scan_number(Lexer* L) {
 static Token scan_identifier(Lexer* L) {
     while (is_alpha(peek(L)) || is_digit(peek(L))) advance(L);
     int length = (int)(L->current - L->start);
-    TokenType type = check_keyword(L->start, length);
+    RizTokenType type = check_keyword(L->start, length);
     return make_token(L, type);
 }
 
@@ -324,7 +324,7 @@ Token lexer_next_token(Lexer* L) {
  *  Debug: token type names
  * ═══════════════════════════════════════════════════════ */
 
-const char* token_type_name(TokenType type) {
+const char* token_type_name(RizTokenType type) {
     switch (type) {
         case TOK_INT:           return "INT";
         case TOK_FLOAT:         return "FLOAT";

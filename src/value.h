@@ -32,8 +32,16 @@ typedef enum {
     VAL_VM_CLOSURE     /* Bytecode function for the register VM (separate from AST RizFunction) */
 } ValueType;
 
+#ifndef RIZ_API_CALL
+#ifdef _WIN32
+#define RIZ_API_CALL __cdecl
+#else
+#define RIZ_API_CALL
+#endif
+#endif
+
 /* ─── Native Function Pointer ─────────────────────────── */
-typedef RizValue (*NativeFnPtr)(RizValue* args, int arg_count);
+typedef RizValue (RIZ_API_CALL *NativeFnPtr)(RizValue* args, int arg_count);
 
 /* ─── Riz List ────────────────────────────────────────── */
 typedef struct {

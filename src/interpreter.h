@@ -9,6 +9,7 @@
 #include "ast.h"
 #include "environment.h"
 #include "vm.h"
+#include <setjmp.h>
 
 /* ─── Signal Types for control flow ───────────────────── */
 typedef enum {
@@ -42,6 +43,7 @@ typedef struct {
     /* Snapshot of call_stack at throw (for uncaught exception report after frames pop) */
     char**       error_stack;
     int          error_stack_len;
+    jmp_buf      panic_jmp;     /* Safe exit point (setjmp) for fatal errors */
 } Interpreter;
 
 /* ─── API ─────────────────────────────────────────────── */

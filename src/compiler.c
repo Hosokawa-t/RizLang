@@ -19,6 +19,15 @@
 #include <string.h>
 
 /* ─── Compiler State ──────────────────────────────────── */
+
+/* Loop break/continue patch list */
+typedef struct {
+    int* breaks;       /* positions of LOOP_BREAK instructions to patch */
+    int  break_count;
+    int  break_cap;
+    int  continue_target; /* PC of loop increment / condition recheck */
+} LoopContext;
+
 typedef struct {
     Chunk* chunk;
     bool   had_error;
@@ -35,6 +44,10 @@ typedef struct {
     } locals[RIZ_MAX_LOCALS];
     int local_count;
     int scope_depth;
+
+    /* Loop control (break/continue) */
+    LoopContext loops[64];
+    int         loop_depth;
 } Compiler;
 
 static Compiler C;
@@ -84,6 +97,53 @@ static int emit_jmp(int line) {
 static void patch_jmp(int pos) {
     int offset = C.chunk->count - pos - 1;
     C.chunk->code[pos] = RIZ_AsBx(OP_JMP, 0, offset);
+}
+
+/* Patch a LOOP_BREAK/LOOP_CONT instruction at `pos` */
+static void patch_loop_jmp(int pos, uint8_t op) {
+    int offset = C.chunk->count - pos - 1;
+    C.chunk->code[pos] = RIZ_AsBx(op, 0, offset);
+}
+
+/* ─── Loop context management ─────────────────────────── */
+
+static void push_loop(void) {
+    if (C.loop_depth >= 64) {
+        fprintf(stderr, "[compiler] Too many nested loops\n");
+        C.had_error = true;
+        return;
+    }
+    LoopContext* lc = &C.loops[C.loop_depth++];
+    lc->breaks = NULL;
+    lc->break_count = 0;
+    lc->break_cap = 0;
+    lc->continue_target = -1;
+}
+
+static void pop_loop(void) {
+    if (C.loop_depth <= 0) return;
+    LoopContext* lc = &C.loops[--C.loop_depth];
+    /* Patch all break jumps to current position */
+    for (int i = 0; i < lc->break_count; i++) {
+        patch_loop_jmp(lc->breaks[i], OP_LOOP_BREAK);
+    }
+    free(lc->breaks);
+    lc->breaks = NULL;
+}
+
+static void add_break_patch(int pos) {
+    if (C.loop_depth <= 0) {
+        fprintf(stderr, "[compiler] 'break' outside loop\n");
+        C.had_error = true;
+        return;
+    }
+    LoopContext* lc = &C.loops[C.loop_depth - 1];
+    if (lc->break_count >= lc->break_cap) {
+        int nc = lc->break_cap < 8 ? 8 : lc->break_cap * 2;
+        lc->breaks = (int*)realloc(lc->breaks, sizeof(int) * nc);
+        lc->break_cap = nc;
+    }
+    lc->breaks[lc->break_count++] = pos;
 }
 
 /* ─── Scope management ────────────────────────────────── */
@@ -182,6 +242,27 @@ static int compile_expr(ASTNode* node) {
             return dest;
         }
 
+        case NODE_DICT_LIT: {
+            int n = node->as.dict_lit.count;
+            if (n > 127) {
+                fprintf(stderr, "[compiler] dict literal too large for VM (max 127 entries) at line %d\n", line);
+                C.had_error = true;
+                return 0;
+            }
+            int base = C.free_reg;
+            for (int i = 0; i < n; i++) {
+                /* Key: compile into even slot */
+                compile_into(node->as.dict_lit.keys[i], base + i * 2);
+                C.free_reg = base + i * 2 + 1;
+                /* Value: compile into odd slot */
+                compile_into(node->as.dict_lit.values[i], base + i * 2 + 1);
+                C.free_reg = base + i * 2 + 2;
+            }
+            int dest = alloc_reg();
+            emit(RIZ_ABC(OP_NEWDICT, dest, base, (uint8_t)n), line);
+            return dest;
+        }
+
         case NODE_IDENTIFIER: {
             const char* name = node->as.identifier.name;
             int slot = resolve_local(name);
@@ -208,6 +289,30 @@ static int compile_expr(ASTNode* node) {
         }
 
         case NODE_BINARY: {
+            /* Short-circuit and/or */
+            if (node->as.binary.op == TOK_AND) {
+                int lhs = compile_expr(node->as.binary.left);
+                emit(RIZ_ABC(OP_TEST, lhs, 0, 0), line); /* if false, skip rhs */
+                int skip = emit_jmp(line);
+                int rhs = compile_expr(node->as.binary.right);
+                if (rhs != lhs)
+                    emit(RIZ_ABC(OP_MOVE, lhs, rhs, 0), line);
+                free_reg(rhs);
+                patch_jmp(skip);
+                return lhs;
+            }
+            if (node->as.binary.op == TOK_OR) {
+                int lhs = compile_expr(node->as.binary.left);
+                emit(RIZ_ABC(OP_TEST, lhs, 0, 1), line); /* if true, skip rhs */
+                int skip = emit_jmp(line);
+                int rhs = compile_expr(node->as.binary.right);
+                if (rhs != lhs)
+                    emit(RIZ_ABC(OP_MOVE, lhs, rhs, 0), line);
+                free_reg(rhs);
+                patch_jmp(skip);
+                return lhs;
+            }
+
             /* Compile left and right, then emit op */
             int lhs = compile_expr(node->as.binary.left);
             int rhs = compile_expr(node->as.binary.right);
@@ -369,6 +474,20 @@ static int compile_expr(ASTNode* node) {
             int dest = alloc_reg();
             emit(RIZ_ABC(OP_GETINDEX, dest, obj_r, idx_r), line);
             free_reg(idx_r);
+            free_reg(obj_r);
+            return dest;
+        }
+
+        case NODE_MEMBER: {
+            int obj_r = compile_expr(node->as.member.object);
+            int dest = alloc_reg();
+            int k = add_string_const(node->as.member.member);
+            if (k > 255) {
+                fprintf(stderr, "[compiler] too many constants for GETMEMBER at line %d\n", line);
+                C.had_error = true;
+                return 0;
+            }
+            emit(RIZ_ABC(OP_GETMEMBER, dest, obj_r, (uint8_t)k), line);
             free_reg(obj_r);
             return dest;
         }
@@ -590,7 +709,9 @@ static void compile_stmt(ASTNode* node) {
         }
 
         case NODE_WHILE_STMT: {
+            push_loop();
             int loop_start = C.chunk->count;
+            C.loops[C.loop_depth - 1].continue_target = loop_start;
 
             int cond_r = compile_expr(node->as.while_stmt.condition);
             emit(RIZ_ABC(OP_TEST, cond_r, 0, 0), line);
@@ -605,11 +726,13 @@ static void compile_stmt(ASTNode* node) {
             emit(RIZ_AsBx(OP_JMP, 0, offset), line);
 
             patch_jmp(exit_jmp);
+            pop_loop();
             break;
         }
 
         case NODE_FOR_STMT: {
             begin_scope();
+            push_loop();
             int list_r = compile_expr(node->as.for_stmt.iterable);
             int idx_r = alloc_reg();
             int k0 = add_const(riz_int(0));
@@ -617,6 +740,7 @@ static void compile_stmt(ASTNode* node) {
 
             int len_r = emit_len_call(list_r, line);
             if (C.had_error) {
+                pop_loop();
                 end_scope();
                 break;
             }
@@ -633,6 +757,10 @@ static void compile_stmt(ASTNode* node) {
             emit(RIZ_ABC(OP_GETINDEX, var_slot, list_r, idx_r), line);
             compile_stmt(node->as.for_stmt.body);
 
+            /* Continue target: the increment */
+            int incr_pos = C.chunk->count;
+            C.loops[C.loop_depth - 1].continue_target = incr_pos;
+
             int k1 = add_const(riz_int(1));
             int one_r = alloc_reg();
             emit(RIZ_ABx(OP_LOADK, one_r, k1), line);
@@ -643,6 +771,7 @@ static void compile_stmt(ASTNode* node) {
             emit(RIZ_AsBx(OP_JMP, 0, offset), line);
 
             patch_jmp(exit_jmp);
+            pop_loop();
             end_scope();
             break;
         }
@@ -667,13 +796,61 @@ static void compile_stmt(ASTNode* node) {
             break;
 
         case NODE_FN_DECL:
-            if (inside_fn) {
-                fprintf(stderr, "[compiler] nested functions are not supported for VM bytecode\n");
+            compile_top_level_fn(node);
+            break;
+
+        case NODE_BREAK_STMT: {
+            if (C.loop_depth <= 0) {
+                fprintf(stderr, "[compiler] 'break' outside loop at line %d\n", line);
                 C.had_error = true;
                 break;
             }
-            compile_top_level_fn(node);
+            int pos = emit(RIZ_AsBx(OP_LOOP_BREAK, 0, 0), line);
+            add_break_patch(pos);
             break;
+        }
+
+        case NODE_CONTINUE_STMT: {
+            if (C.loop_depth <= 0) {
+                fprintf(stderr, "[compiler] 'continue' outside loop at line %d\n", line);
+                C.had_error = true;
+                break;
+            }
+            int target = C.loops[C.loop_depth - 1].continue_target;
+            if (target >= 0) {
+                int offset = target - C.chunk->count - 1;
+                emit(RIZ_AsBx(OP_LOOP_CONT, 0, offset), line);
+            } else {
+                /* continue_target not yet set (while loop) — jump to loop start */
+                /* For while loops, continue_target is set at push_loop time */
+                fprintf(stderr, "[compiler] 'continue' target not available at line %d\n", line);
+                C.had_error = true;
+            }
+            break;
+        }
+
+        case NODE_INDEX_ASSIGN: {
+            int obj_r = compile_expr(node->as.index_assign.object);
+            int idx_r = compile_expr(node->as.index_assign.index);
+            int val_r = compile_expr(node->as.index_assign.value);
+            emit(RIZ_ABC(OP_SETINDEX, obj_r, idx_r, val_r), line);
+            free_reg(val_r);
+            free_reg(idx_r);
+            free_reg(obj_r);
+            break;
+        }
+
+        case NODE_MEMBER_ASSIGN: {
+            int obj_r = compile_expr(node->as.member_assign.object);
+            int val_r = compile_expr(node->as.member_assign.value);
+            int k = add_string_const(node->as.member_assign.member);
+            emit(RIZ_ABx(OP_SETMEMBER, obj_r, k), line);
+            /* Encode value register in a following NOP-like instruction word */
+            emit(RIZ_ABC(0, val_r, 0, 0), line);
+            free_reg(val_r);
+            free_reg(obj_r);
+            break;
+        }
 
         case NODE_IMPORT: {
             int k = add_string_const(node->as.import_stmt.path);
@@ -709,6 +886,7 @@ bool compiler_compile_ex(ASTNode* program, Chunk* chunk, bool module_return) {
     C.max_reg = 0;
     C.local_count = 0;
     C.scope_depth = 0;
+    C.loop_depth = 0;
     inside_fn = false;
 
     compile_stmt(program);

@@ -36,52 +36,52 @@
 
 typedef RizValue RizPluginValue;
 
+#ifdef _WIN32
+#define RIZ_API_CALL __cdecl
+#else
+#define RIZ_API_CALL
+#endif
+
 /* ─── Plugin Function Signature ───────────────────────── */
-typedef RizPluginValue (*RizPluginFn)(RizPluginValue* args, int arg_count);
+typedef RizPluginValue (RIZ_API_CALL *RizPluginFn)(RizPluginValue* args, int arg_count);
+
+/* ─── Plugin API (passed to riz_plugin_init) ──────────── */
 
 /* ─── Plugin API (passed to riz_plugin_init) ──────────── */
 typedef struct {
-    /* Register a new native function visible to Riz scripts.
-     * name:  function name in Riz (e.g., "matrix_mul")
-     * fn:    function pointer matching RizPluginFn
-     * arity: expected argument count (-1 for variadic) */
-    void (*register_fn)(void* interp, const char* name, RizPluginFn fn, int arity);
+    size_t size; /* Safety check: sizeof(RizPluginAPI) */
 
-    /* Empty dict (ref-counted). Use dict_set_fn + define_global for namespaces like `py`. */
-    RizPluginValue (*make_dict)(void);
-    /* Store a native under key in dict (e.g. key "exec", riz_name "py.exec" for errors). */
-    void (*dict_set_fn)(RizPluginValue dict, const char* key, const char* riz_name, RizPluginFn fn, int arity);
-    /* Bind an arbitrary value into global scope (e.g. the `py` dict). */
-    void (*define_global)(void* interp, const char* name, RizPluginValue value);
+    /* Register a new native function visible to Riz scripts. */
+    void (RIZ_API_CALL *register_fn)(void* interp, const char* name, RizPluginFn fn, int arity);
 
-    /* Convenience constructors for returning values to Riz: */
-    RizPluginValue (*make_int)(int64_t v);
-    RizPluginValue (*make_float)(double v);
-    RizPluginValue (*make_bool)(bool v);
-    RizPluginValue (*make_string)(const char* v);
-    RizPluginValue (*make_none)(void);
-    RizPluginValue (*make_list)(void);
+    /* Empty dict (ref-counted). */
+    RizPluginValue (RIZ_API_CALL *make_dict)(void);
+    void (RIZ_API_CALL *dict_set_fn)(RizPluginValue dict, const char* key, const char* riz_name, RizPluginFn fn, int arity);
+    void (RIZ_API_CALL *define_global)(void* interp, const char* name, RizPluginValue value);
 
-    /* Native pointer: wraps a C pointer so Riz can hold it as a variable.
-     * type_tag: human-readable label (e.g. "Tensor", "Model")
-     * dtor:     called when Riz frees this value (NULL = no cleanup) */
-    RizPluginValue (*make_native_ptr)(void* ptr, const char* type_tag,
-                                      void (*dtor)(void*));
+    /* Convenience constructors: */
+    RizPluginValue (RIZ_API_CALL *make_int)(int64_t v);
+    RizPluginValue (RIZ_API_CALL *make_float)(double v);
+    RizPluginValue (RIZ_API_CALL *make_bool)(bool v);
+    RizPluginValue (RIZ_API_CALL *make_string)(const char* v);
+    RizPluginValue (RIZ_API_CALL *make_none)(void);
+    RizPluginValue (RIZ_API_CALL *make_list)(void);
 
-    /* Extract the raw C pointer from a VAL_NATIVE_PTR value: */
-    void* (*get_native_ptr)(RizPluginValue v);
+    /* Native pointer: */
+    RizPluginValue (RIZ_API_CALL *make_native_ptr)(void* ptr, const char* type_tag, void (*dtor)(void*));
+    void* (RIZ_API_CALL *get_native_ptr)(RizPluginValue v);
 
     /* List manipulation: */
-    void (*list_append)(RizPluginValue list, RizPluginValue v);
-    int (*list_length)(RizPluginValue list);
-    RizPluginValue (*list_get)(RizPluginValue list, int index);
+    void (RIZ_API_CALL *list_append)(RizPluginValue list, RizPluginValue v);
+    int (RIZ_API_CALL *list_length)(RizPluginValue list);
+    RizPluginValue (RIZ_API_CALL *list_get)(RizPluginValue list, int index);
 
     /* The interpreter pointer (opaque to plugins): */
     void* interp;
 
     /* ─── Diagnostics & Error Handling ────────────────────── */
-    int (*get_current_line)(void* interp);
-    void (*panic)(void* interp, const char* msg);
+    int (RIZ_API_CALL *get_current_line)(void* interp);
+    void (RIZ_API_CALL *panic)(void* interp, const char* msg);
 } RizPluginAPI;
 
 /* ─── Plugin Init Function Signature ──────────────────── */
